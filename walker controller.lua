@@ -32,27 +32,37 @@ config = {
     heightDriveDeltaCap = 1/40; --Maximum amount a leg's height drive response (pitch, roll) can change in a single tick. Exists to smooth out jerky motion.
 }
 
+--(Terminology note: "Vertical" is the vehicle's own up/down axis, "lateral" is its left/right axis, and "medial" is its forward/backward axis.)
 --Add an unkeyed table for each leg on the craft into the following table, with these arguments in this order:
 
---name:             Name of leg, looks for all spinblocks named leg_<name>_<hip/root/knee/foot/ankle> to determine the spinblocks apart of this leg.
---restAngle:        Angle (IN DEGREES) the hip is offset from 0 while at rest. Also affects angles while in motion.
---cycleOffset:      Offset to the cycle of the leg. Used so you can, say, have half the legs off the ground and the other half on the ground while in motion.
---forwardResponse:  Weight of forward drive request when determining the leg's response.
---yawResponse:      Weight of yaw drive request when determining the leg's response.
---mainResponse:     Weight of main drive request when determining the leg's response.
---pitchResponse:    Weight of the pitch drive request when determining the leg's height response.
---rollResponse:     Weight of the roll drive request when determining the leg's height response.
---heightDeviation:  Maximum the base standing height can change by due to pitch/roll request.
---groundOffset:     Distance from leg root to ground vertically. Should be negative.
---raiseOffset:      Distance from leg root to its highest raised position during the walk cycle. Should be greater than groundOffset.
---rootLength:       Length of the segment attached to the root spinblock of the leg (the one directly attached to the hip). Includes knee spinblock!
---kneeLength:       Length of the segment attached to the knee spinblock of the leg (the one attached to the root segment). Includes foot spinblock!
---reach:            How far out from the root spinblock should the foot be, horizontally.
+--name:                 Name of leg, looks for all spinblocks named leg_<name>_<hip/root/knee/foot/ankle> to determine the spinblocks apart of this leg.
+--restReachMedial:      How far the foot should be from the root along the vehicle's medial axis while at rest.
+--restReachLateral:     How far the foot should be from the root along the vehicle's lateral axis while at rest.
+--cycleOffset:          Offset to the cycle of the leg. Used so you can, say, have half the legs off the ground and the other half on the ground while in motion.
+--forwardResponse:      Weight of the forward drive request when determining the leg's medial response.
+--mainResponse:         Weight of the main drive request when determining the leg's medial response.
+--pitchResponse:        Weight of the pitch drive request when determining the leg's vertical response.
+--rollResponse:         Weight of the roll drive request when determining the leg's vertical response.
+--hoverResponse:        Weight of the hover drive request when determining the leg's vertical response.
+--strafeResponse:       Weight of the strafe drive request when determining the leg's lateral response.
+--yawResponseMedial:    Weight of the yaw drive request when determining the leg's medial response.
+--yawResponseLateral:   Weight of the yaw drive request when determining the leg's lateral response.
+--forwardStride:        Maximum distance forward from resting position in a step.
+--backwardStride:       Maximum distance backward from resting position in a step.
+--outStride:            Maximum distance from resting position, laterally away from the root, in a step. 
+--inStride:             Maximum distance from resting position, laterally towards the root, in a step. 
+--heightDeviation:      Maximum the base standing height can change by due to pitch/roll request.
+--groundOffset:         Distance from leg root to ground vertically. Should be negative.
+--raiseOffset:          Distance from leg root to its highest raised position during the walk cycle. Should be greater than groundOffset.
+--rootLength:           Length of the segment attached to the root spinblock of the leg (the one directly attached to the hip). Includes knee spinblock!
+--kneeLength:           Length of the segment attached to the knee spinblock of the leg (the one attached to the root segment). Includes foot spinblock!
 
 legSettings = {
-  --{  name, ra, co, fr, yr, mr, pr, rr, hd, go, ro, rl, kl, re};
-    {"test",  0,  0,  1,  0,  1,  0,  0,  0, -4, -2,  5,  9,  8};
+  --{  name, rm, rl, co, fr, mr, pr, rr, hr, sr, ym, yl, fs, bs, os, is, hd, go, ro, rl, kl, re};
+    {"test",  0,  0,  0,  1,  1,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, -4, -2,  5,  9,  8};
 }
+
+
 
 --############################################################################
 --#                                                                          #
@@ -94,7 +104,8 @@ legController.mt = {__call = legController}
 
 --I: The "I" variable from the Update() function.
 --For other arguments, see the settings table at the top of the program.
-function legController.new(I, name, restAngle, cycleOffset, forwardResponse, yawResponse, mainResponse, pitchResponse, rollResponse, heightDeviation, groundOffset, raiseOffset, rootLength, kneeLength, reach)
+function legController.new(I, name, restReachMedial, restReachLateral, cycleOffset, forwardResponse, mainResponse, pitchResponse, rollResponse, hoverResponse, strafeResponse, 
+        yawResponseMedial, yawResponseLateral, forwardStride, backwardStride, outStride, inStride, heightDeviation, groundOffset, raiseOffset, rootLength, kneeLength)
     local leg = {}
 
     leg.name = name
@@ -111,19 +122,30 @@ function legController.new(I, name, restAngle, cycleOffset, forwardResponse, yaw
     if not leg.footID then logBuffer("[WARN] Failed to find foot spinblock for leg \"" .. name .. "\"!") end
     if not leg.ankleID then logBuffer("[WARN] Failed to find ankle spinblock for leg \"" .. name .. "\"!") end
 
-    leg.restAngle = restAngle
+    leg.restReachMedial = restReachMedial
+    leg.restReachLateral = restReachLateral
+
     leg.cycleOffset = cycleOffset
+
     leg.forwardResponse = forwardResponse
     leg.yawResponse = yawResponse
     leg.mainResponse = mainResponse
     leg.pitchResponse = pitchResponse
     leg.rollResponse = rollResponse
+    leg.hoverResponse = hoverResponse
+    leg.strafeResponse = strafeResponse
+
+    leg.forwardStride = forwardStride
+    leg.backwardStride = backwardStride
+    leg.outStride = outStride
+    leg.inStride = inStride
+
     leg.heightDeviation = heightDeviation
     leg.groundOffset = groundOffset
     leg.raiseOffset = raiseOffset
+
     leg.rootLength = rootLength
     leg.kneeLength = kneeLength
-    leg.reach = reach
 
     leg.controller = legController.newThread(leg, I)
     table.insert(legController.legList, leg)
@@ -133,7 +155,6 @@ function legController.new(I, name, restAngle, cycleOffset, forwardResponse, yaw
     return leg
 end
 
---At this rate I might just end up redoing this function entirely
 function legController.actionThread(leg, I)
     local cycleCounter, forwardRequest, yawRequest, mainRequest, walkRequest, pitchRequest, rollRequest, heightRequest, hipAngle, rootAngle, kneeAngle, footAngle, stepLength, heightModifier
     stepLength = config.stepAngle
@@ -142,38 +163,7 @@ function legController.actionThread(leg, I)
     while true do
         cycleCounter, forwardRequest, yawRequest, mainRequest, pitchRequest, rollRequest = coroutine.yield()
 
-        walkRequest = forwardRequest * leg.forwardResponse + yawRequest * leg.yawResponse + mainRequest * leg.mainResponse
-        heightRequest = pitchRequest * leg.pitchResponse + rollRequest * leg.rollResponse
-
-        walkResponse = walkResponse + Mathf.Clamp(walkRequest - walkResponse, -config.walkDriveDeltaCap, config.walkDriveDeltaCap)
-        heightResponse = heightResponse + Mathf.Clamp(heightRequest - heightResponse, -config.heightDriveDeltaCap, config.heightDriveDeltaCap)
-
-        heightModifier = Mathf.Clamp(heightResponse, -1, 1) * leg.heightDeviation
-        stepLength = config.stepAngle * Mathf.Clamp(walkResponse, -1, 1)
-
-        cycleCounter = (cycleCounter + leg.cycleOffset) % 1
-
-        rootAngle, kneeAngle, footAngle = 0, 0, 0
-
-        if stepLength == 0 then
-            hipAngle = leg.restAngle
-            rootAngle, kneeAngle, footAngle = inverseKinematics.solveCoordinates(leg.reach, leg.groundOffset + heightModifier, leg.rootLength, leg.kneeLength)
-        else
-            hipAngle = stepLength * Mathf.Sin(cycleCounter * pi2) + leg.restAngle
-            local stepCoeff = Mathf.Cos(cycleCounter * pi2)    --Should be clamped to [0, 1] but Mathf.Lerp() does that for us already.
-            local stepHeight = Mathf.Lerp(leg.groundOffset, leg.raiseOffset, stepCoeff)
-
-            rootAngle, kneeAngle, footAngle = inverseKinematics.solveCoordinates(leg.reach / Mathf.Cos(hipAngle * rad), stepHeight + heightModifier, leg.rootLength, leg.kneeLength)
-        end
-
-        rootAngle, kneeAngle, footAngle = rootAngle * deg, kneeAngle * deg, footAngle * deg
-        ankleAngle = -hipAngle
-
-        I:SetSpinBlockRotationAngle(leg.hipID, hipAngle)
-        I:SetSpinBlockRotationAngle(leg.rootID, rootAngle)
-        I:SetSpinBlockRotationAngle(leg.kneeID, kneeAngle)
-        I:SetSpinBlockRotationAngle(leg.footID, footAngle)
-        I:SetSpinBlockRotationAngle(leg.ankleID, ankleAngle)
+        
     end
 end
 
