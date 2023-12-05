@@ -218,8 +218,14 @@ function Update(I)
         isStartup = false
     end
 
+    local mainDrive = I:GetPropulsionRequest(0)
+    local forwardDrive = I:GetPropulsionRequest(6)
+    local yawDrive = I:GetPropulsionRequest(5)
+    local pitchDrive = I:GetPropulsionRequest(4)
+    local rollDrive = I:GetPropulsionRequest(3)
+
     for index, leg in ipairs(legController.legList) do
-        coroutine.resume(leg.controller, cycleStopwatch, 0, 0, 0, 0, 0) 
+        coroutine.resume(leg.controller, cycleStopwatch, forwardDrive, yawDrive, mainDrive, pitchDrive, rollDrive) 
     end
 
     cycleStopwatch = (cycleStopwatch + config.deltaTime / config.cycleDuration) % 1 
