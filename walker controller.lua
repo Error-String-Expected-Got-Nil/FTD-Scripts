@@ -15,28 +15,26 @@ pi2 = Mathf.PI * 2
 startupLog = ""
 function logBuffer(str) startupLog = startupLog .. str .. "\n" end
 
---#################################################################################################################
---#                                                                                                               #
---#   This is a general-purpose controller for insectoid walker legs. It should be capable of handling the vast   # 
---#          majority of walkers with such legs, even some exceptionally weird ones, if set up properly.          #  
---#                                                                                                               #
---#   If you do unnatural things to the configuration and perform some modifications, it could probably handle    #
---#                              humanoid walkers too, though it isn't intended to.                               #               
---#                                                                                                               #
---#################################################################################################################
+--#######################################################################################################
+--#                                                                                                     #
+--#   This is a general-purpose walker leg controller designed to work with 5-jointed insectoid legs.   # 
+--#   It is highly configurable, and should be able to control the vast majority of walkers, even if    #  
+--#                                 they are using an unusual layout.                                   #
+--#                                                                                                     #
+--#######################################################################################################
 
---Terminology note: "Vertical", "lateral", and "medial" (v, l, m) are offsets from the position of a leg's root spinblock, relative to the leg's orientation.
+--Terminology note: "Vertical", "lateral", and "medial" (v, l, m) are offsets from the position of a leg's root spinblock, relative to the leg's orientation. +v is up from the root,
+--      -v is down, +l is forward, -l is backward, +m is away, and -m is toward. Note that the lateral direction can be reversed for a leg by making its hip spinblock rotate in
+--       reverse, and it is recommended you adjust your legs so that +l/-l is forward/backward relative to the craft (though not required).
 
---For correctly orientedlegs on the left or right side of the craft, +v is up, -v is down, +l is away from the craft, -l is towards the craft, 
---      +m is forward, and -m is backward. Since responses are configurable, you can simply make 
+--Basic diagram of a splayed-out leg as viewed from the side. 'O' indicates a lateral spinblock, 'I' a vertical one, and '=' is a connecting segment.
 
---Basic diagram of a splayed-out leg as viewed from the side. 'O' indicates a lateral spinblock, '[' a vertical one, and '=' is a connecting segment.
-
---   Ankle   Knee     Hip                        
---     |       |       |                           
---     [O======O======O[                               
---      |             |                          
---    Foot          Root    
+--   Ankle   Knee     Hip                       
+--     |       |       |                          
+--     IO======O======OI                                  
+--      |             |                         
+--    Foot          Root       
+--
 
 --Hip is attached to the craft, ankle to the sticky foot. Ankle ensures the foot is always pointing in the direction it is moving, foot spinblock ensures it is
 --      always parallel to the ground. Hip, root, and knee joints combine to allow for general articulation.
@@ -54,15 +52,15 @@ config = {
 --name:                 Name of the leg. Used to look for the spinblocks that make it up, in the format "leg_<name>_<hip/root/knee/foot/ankle>".
 --cycleOffset:          Offset of the leg's walk cycle from the base, so they aren't all trying to get off the ground at the same time. Should be on the range [0, 1).
 --restPosition:         Table of offsets to determine where the foot's rest position is. {v, l, m}
---maxPosition:          Maximum offsets from rest for foot position in each axis. Each should be positive. {v, l, m}
---minPosition:          Minimum offsets from rest for foot position in each axis. Each should be negative. {v, l, m}
---mainResponse:         Response weight to main drive in each axis. Main should probably only use the medial axis unless you're doing something weird. {v, l, m}
+--maxPosition:          Maximum offsets from rest position for foot position in each axis. Each should be positive. {v, l, m}
+--minPosition:          Minimum offsets from rest position for foot position in each axis. Each should be negative. {v, l, m}
+--mainResponse:         Response weight to main drive in each axis. Main should probably only use the lateral axis unless you're doing something weird. {v, l, m}
 --rollResponse:         Response weight to roll drive in each axis. Roll should probably only use the vertical axis unless you're doing something weird. {v, l, m}
 --pitchResponse:        Response weight to pitch drive in each axis. Pitch should probably only use the vertical axis unless you're doing something weird. {v, l, m}
 --yawResponse:          Response weight to yaw drive in each axis. Yaw should probably only use the lateral and medial axes unless you're doing something weird. {v, l, m}
---forwardResponse:      Response weight to forward drive in each axis. Forward should probably only use the medial axis unless you're doing something weird. {v, l, m}
+--forwardResponse:      Response weight to forward drive in each axis. Forward should probably only use the lateral axis unless you're doing something weird. {v, l, m}
 --hoverResponse:        Response weight to hover drive in each axis. Hover should probably only use the vertical axis unless you're doing something weird. {v, l, m}
---strafeResponse:       Response weight to strafe drive in each axis. Strafe should probably only use the lateral axis unless you're doing something weird. {v, l, m}
+--strafeResponse:       Response weight to strafe drive in each axis. Strafe should probably only use the medial axis unless you're doing something weird. {v, l, m}
 --stepHeight:           How much the foot raises during a step. Should be positive.
 --rootLength:           Length of the segment attached to the root joint spinblock, from the root joint spinblock to (and including) the knee joint spinblock.
 --kneeLength:           Length of the segment attached to the knee joint spinblock, from the knee joint spinblock to (and including) the foot joint spinblock.
