@@ -27,11 +27,8 @@ function logBuffer(str) startupLog = startupLog .. str .. "\n" end
 
 --Terminology note: "Vertical", "lateral", and "medial" (v, l, m) are offsets from the position of a leg's root spinblock, relative to the leg's orientation.
 
---For properly oriented legs, +v is always up, -v is always down. Lateral and medial depend on which side of the craft a leg is on, but should
---      follow the rule that +l is the same direction as the side of the craft the leg is on, and -l the opposite. That is, +l should be right and -l should be left
---      for a leg on the right side of the craft, and vice versa for the left. +m is the direction the leg goes if its hip spinblock rotates in its positive
---      direction (which should be clockwise if it's upright). You may want to ensure a positive rotation always means +m by adjusting the hip spinblock's global
---      response, to make your settings more readable.
+--For correctly orientedlegs on the left or right side of the craft, +v is up, -v is down, +l is away from the craft, -l is towards the craft, 
+--      +m is forward, and -m is backward. Since responses are configurable, you can simply make 
 
 --Basic diagram of a splayed-out leg as viewed from the side. 'O' indicates a lateral spinblock, '[' a vertical one, and '=' is a connecting segment.
 
