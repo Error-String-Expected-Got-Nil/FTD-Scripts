@@ -14,6 +14,7 @@ rad = Mathf.Deg2Rad
 pi2 = Mathf.PI * 2
 startupLog = ""
 function logBuffer(str) startupLog = startupLog .. str .. "\n" end
+function vlm(tab) return {v = tab[1], l = tab[2], m = tab[3]} end
 
 --#######################################################################################################
 --#                                                                                                     #
@@ -39,21 +40,27 @@ function logBuffer(str) startupLog = startupLog .. str .. "\n" end
 --Hip is attached to the craft, ankle to the sticky foot. Ankle ensures the foot is always pointing in the direction it is moving, foot spinblock ensures it is
 --      always parallel to the ground. Hip, root, and knee joints combine to allow for general articulation.
 
+--Root, knee, and foot spinblocks should be oriented such that their segment moves upwards when they rotate clockwise. You can also put them in reverse mode for the same effect if 
+--      you accidentally built them wrong.
+
+--All spinblocks should be in "rotate at a speed determined by rate controller" mode, with spin rate set to maximum.
+
 config = {
     cycleDuration = 2;          --Amount of time, in seconds, it takes for a single walk cycle to pass.
     deltaTime = 1/40;           --Amount of time, in seconds, that passes each tick. Should be 1/40th of a second, the length of an FTD physics step.
-    verticalDeltaCap = 1/40;    --Maximum amount total vertical response can change for any given leg in a single tick. Should be on range (0, 1].
-    lateralDeltaCap = 1/40;     --Maximum amount total lateral response can change for any given leg in a single tick. Should be on range (0, 1].
-    medialDeltaCap = 1/40;      --Maximum amount total medial response can change for any given leg in a single tick. Should be on range (0, 1].
+    verticalDeltaCap = 1/40;    --Maximum amount total vertical response can change for any given leg in a single tick. Should be on the range (0, 1].
+    lateralDeltaCap = 1/40;     --Maximum amount total lateral response can change for any given leg in a single tick. Should be on the range (0, 1].
+    medialDeltaCap = 1/40;      --Maximum amount total medial response can change for any given leg in a single tick. Should be on the range (0, 1].
 }
 
 --Add an unkeyed table for each leg on the craft into the following table, with these arguments in this order:
 
---name:                 Name of the leg. Used to look for the spinblocks that make it up, in the format "leg_<name>_<hip/root/knee/foot/ankle>".
+--name:                 Custom name set to to the ankle spinblock of the leg. The program finds this spinblock, then checks subobject parents upwards to find the foot, knee, root, and hip.
 --cycleOffset:          Offset of the leg's walk cycle from the base, so they aren't all trying to get off the ground at the same time. Should be on the range [0, 1).
 --restPosition:         Table of offsets to determine where the foot's rest position is. {v, l, m}
 --maxPosition:          Maximum offsets from rest position for foot position in each axis. Each should be positive. {v, l, m}
 --minPosition:          Minimum offsets from rest position for foot position in each axis. Each should be negative. {v, l, m}
+--stepHeight:           How much the foot raises during a step. Should be positive.
 --mainResponse:         Response weight to main drive in each axis. Main should probably only use the lateral axis unless you're doing something weird. {v, l, m}
 --rollResponse:         Response weight to roll drive in each axis. Roll should probably only use the vertical axis unless you're doing something weird. {v, l, m}
 --pitchResponse:        Response weight to pitch drive in each axis. Pitch should probably only use the vertical axis unless you're doing something weird. {v, l, m}
@@ -61,17 +68,14 @@ config = {
 --forwardResponse:      Response weight to forward drive in each axis. Forward should probably only use the lateral axis unless you're doing something weird. {v, l, m}
 --hoverResponse:        Response weight to hover drive in each axis. Hover should probably only use the vertical axis unless you're doing something weird. {v, l, m}
 --strafeResponse:       Response weight to strafe drive in each axis. Strafe should probably only use the medial axis unless you're doing something weird. {v, l, m}
---stepHeight:           How much the foot raises during a step. Should be positive.
---rootLength:           Length of the segment attached to the root joint spinblock, from the root joint spinblock to (and including) the knee joint spinblock.
---kneeLength:           Length of the segment attached to the knee joint spinblock, from the knee joint spinblock to (and including) the foot joint spinblock.
 
 --The total response of a leg in a given axis equals the sum of the request in each drive multiplied by that leg's response to that drive in the given axis, then clamped 
 --    to the range [-1, 1]. This number is then used as a coefficient to determine the direction and length of each step. Technically, a drive response greater than 1 or 
 --    less than -1 is valid, though usually has little practical use.
 
 legSettings = {
-  --{     name, co, restp {v, l, m}, maxp {v, l, m}, minp {v, l, m}, mr {v, l, m}, rr {v, l, m}, pr {v, l, m}, yr {v, l, m},  fr {v, l, m}, hr {v, l, m}, sr {v, l, m}, sh, rl, kl};
-  --{"example",  0,       {0, 0, 0},      {0, 0, 0},      {0, 0, 0},    {0, 0, 0},    {0, 0, 0},    {0, 0, 0},    {0, 0, 0},     {0, 0, 0},    {0, 0, 0},    {0, 0, 0},  0,  0,  0};
+  --{     name, co, restp {v, l, m}, maxp {v, l, m}, minp {v, l, m}, sh, mr {v, l, m}, rr {v, l, m}, pr {v, l, m}, yr {v, l, m},  fr {v, l, m}, hr {v, l, m}, sr {v, l, m}};
+  --{"example",  0,       {0, 0, 0},      {0, 0, 0},      {0, 0, 0},  0,    {0, 0, 0},    {0, 0, 0},    {0, 0, 0},    {0, 0, 0},     {0, 0, 0},    {0, 0, 0},    {0, 0, 0}};
 }
 
 
@@ -111,25 +115,40 @@ legController.mt = {__call = legController}
 
 --I: The "I" variable from the Update() function.
 --For other arguments, see the settings table at the top of the program.
-function legController.new(I, name, restPosition, maxPosition, minPosition, mainResponse, rollResponse, pitchResponse, yawResponse, forwardResponse, hoverResponse, strafeResponse, 
-            stepHeight, rootLength, kneeLength)
+function legController.new(I, name, cycleOffset, restPosition, maxPosition, minPosition, stepHeight, mainResponse, rollResponse, pitchResponse, yawResponse, forwardResponse, 
+            hoverResponse, strafeResponse)
     local leg = {}
 
     leg.name = name
 
-    leg.hipID = legController.spinblockList["leg_" .. name .. "_hip"]
-    leg.rootID = legController.spinblockList["leg_" .. name .. "_root"]
-    leg.kneeID = legController.spinblockList["leg_" .. name .. "_knee"]
-    leg.footID = legController.spinblockList["leg_" .. name .. "_foot"]
-    leg.ankleID = legController.spinblockList["leg_" .. name .. "_ankle"]
+    leg.ankleID = legController.spinblockList[name]
+    if not leg.ankleID then logBuffer("[ERROR] Failed to find ankle spinblock for leg \"" .. name .. "\"!") end
+    leg.footID = I:GetParent(leg.ankleID)
+    if not leg.footID then logBuffer("[ERROR] Failed to find foot spinblock for leg \"" .. name .. "\"!") end
+    leg.kneeID = I:GetParent(leg.footID)
+    if not leg.kneeID then logBuffer("[ERROR] Failed to find knee spinblock for leg \"" .. name .. "\"!") end
+    leg.rootID = I:GetParent(leg.kneeID)
+    if not leg.rootID then logBuffer("[ERROR] Failed to find root spinblock for leg \"" .. name .. "\"!") end
+    leg.hipID = I:GetParent(leg.rootID)
+    if not leg.hipID then logBuffer("[ERROR] Failed to find hip spinblock for leg \"" .. name .. "\"!") end
+    
+    leg.rootLength = I:GetSubConstructInfo(kneeID).LocalPosition.magnitude
+    leg.kneeLength = I:GetSubConstructInfo(footID).LocalPosition.magnitude
 
-    if not leg.hipID then logBuffer("[WARN] Failed to find hip spinblock for leg \"" .. name .. "\"!") end
-    if not leg.rootID then logBuffer("[WARN] Failed to find root spinblock for leg \"" .. name .. "\"!") end
-    if not leg.kneeID then logBuffer("[WARN] Failed to find knee spinblock for leg \"" .. name .. "\"!") end
-    if not leg.footID then logBuffer("[WARN] Failed to find foot spinblock for leg \"" .. name .. "\"!") end
-    if not leg.ankleID then logBuffer("[WARN] Failed to find ankle spinblock for leg \"" .. name .. "\"!") end
+    leg.cycleOffset = cycleOffset
 
-    --ASSIGN LEG VARIABLES HERE!! DON'T FORGET TO DO THAT!
+    leg.restPosition = vlm(restPosition)
+    leg.maxPosition = vlm(maxPosition)
+    leg.minPosition = vlm(minPosition)
+    leg.stepHeight = stepHeight
+
+    leg.mainResponse = vlm(mainResponse)
+    leg.rollResponse = vlm(mainResponse)
+    leg.pitchResponse = vlm(mainResponse)
+    leg.yawResponse = vlm(mainResponse)
+    leg.forwardResponse = vlm(mainResponse)
+    leg.hoverResponse = vlm(mainResponse)
+    leg.strafeResponse = vlm(mainResponse)
 
     leg.controller = legController.newThread(leg, I)
     table.insert(legController.legList, leg)
@@ -140,11 +159,25 @@ function legController.new(I, name, restPosition, maxPosition, minPosition, main
 end
 
 function legController.actionThread(leg, I)
-    local cycleCounter, forwardRequest, yawRequest, mainRequest, walkRequest, pitchRequest, rollRequest, heightRequest, hipAngle, rootAngle, kneeAngle, footAngle, stepLength, heightModifier
-    local walkResponse, heightResponse = 0, 0
+    local cycle, mainRequest, rollRequest, pitchRequest, yawRequest, forwardRequest, hoverRequest, strafeRequest
+    local verticalRequest, lateralRequest, medialRequest 
+    local verticalResponse, lateralResponse, medialResponse = 0, 0, 0
     
     while true do
-        cycleCounter, forwardRequest, yawRequest, mainRequest, pitchRequest, rollRequest = coroutine.yield()
+        cycle, mainRequest, rollRequest, pitchRequest, yawRequest, forwardRequest, hoverRequest, strafeRequest = coroutine.yield()
+
+        verticalRequest = mainRequest * leg.mainResponse.v + rollRequest * leg.rollResponse.v + pitchRequest * leg.pitchResponse.v + yawRequest * leg.yawResponse.v
+                + forwardRequest * leg.forwardResponse.v + hoverRequest * leg.hoverResponse.v + strafeRequest * leg.strafeResponse.v
+        
+        lateralRequest = mainRequest * leg.mainResponse.l + rollRequest * leg.rollResponse.l + pitchRequest * leg.pitchResponse.l + yawRequest * leg.yawResponse.l
+                + forwardRequest * leg.forwardResponse.l + hoverRequest * leg.hoverResponse.l + strafeRequest * leg.strafeResponse.l
+        
+        medialRequest = mainRequest * leg.mainResponse.m + rollRequest * leg.rollResponse.m + pitchRequest * leg.pitchResponse.m + yawRequest * leg.yawResponse.m
+                + forwardRequest * leg.forwardResponse.m + hoverRequest * leg.hoverResponse.m + strafeRequest * leg.strafeResponse.m
+
+        verticalResponse = verticalResponse + Mathf.Clamp(verticalRequest - verticalResponse, -config.verticalDeltaCap, config.verticalDeltaCap)
+        lateralResponse = lateralResponse + Mathf.Clamp(lateralRequest - lateralResponse, -config.lateralDeltaCap, config.lateralDeltaCap)
+        medialResponse = medialResponse + Mathf.Clamp(medialRequest - medialResponse, -config.medialDeltaCap, config.medialDeltaCap)
 
         
     end
@@ -206,13 +239,16 @@ function Update(I)
     end
 
     local mainDrive = I:GetPropulsionRequest(0)
-    local forwardDrive = I:GetPropulsionRequest(6)
-    local yawDrive = I:GetPropulsionRequest(5)
-    local pitchDrive = I:GetPropulsionRequest(4)
     local rollDrive = I:GetPropulsionRequest(3)
+    local pitchDrive = I:GetPropulsionRequest(4)
+    local yawDrive = I:GetPropulsionRequest(5)
+    local forwardDrive = I:GetPropulsionRequest(6)
+    local hoverDrive = I:GetPropulsionRequest(7)
+    local strafeDrive = I:GetPropulsionRequest(8)
+    
 
     for index, leg in ipairs(legController.legList) do
-        coroutine.resume(leg.controller, cycleStopwatch, forwardDrive, yawDrive, mainDrive, pitchDrive, rollDrive) 
+        coroutine.resume(leg.controller, cycleStopwatch, mainDrive, rollDrive, pitchDrive, yawDrive, forwardDrive, hoverDrive, strafeDrive) 
     end
 
     cycleStopwatch = (cycleStopwatch + config.deltaTime / config.cycleDuration) % 1 
