@@ -15,12 +15,12 @@ function logBuffer(str) startupLog = startupLog .. str .. "\n" end
 --###########################################################################################
 
 config = {
-    groundOffset = -4;  --Distance from leg root to ground. Should be negative.
-    raiseOffset = -2;   --Distance from leg root to height of foot when it is lifted up during walk cycle. Should be greater than groundOffset.
-    defaultReach = 8;   --Distance from leg root to foot horizontally, away from the vehicle. Default if not set by individual leg.
-    stepAngle = 30;     --Farthest angle, in degrees, a leg should move away from its default angle while moving.
-    cycleDuration = 2;  --Amount of time, in seconds, it takes for a single walk cycle to pass.
-    deltaTime = 1/40;   --Amount of time, in seconds, that passes each tick. Should be 1/40th of a second, the length of an FTD physics step.
+    defaultGroundOffset = -4;   --Distance from leg root to ground vertically. Should be negative.
+    defaultRaiseOffset = -2;    --Distance from leg root to height of foot vertically when it is lifted up during walk cycle. Should be greater than groundOffset.
+    defaultReach = 8;           --Distance from leg root to foot horizontally, away from the vehicle. Default if not set by individual leg.
+    stepAngle = 30;             --Farthest angle, in degrees, a leg should move away from its default angle while moving.
+    cycleDuration = 2;          --Amount of time, in seconds, it takes for a single walk cycle to pass.
+    deltaTime = 1/40;           --Amount of time, in seconds, that passes each tick. Should be 1/40th of a second, the length of an FTD physics step.
 }
 
 --Add an unkeyed table for each leg on the craft into the following table, with these arguments in this order:
@@ -34,13 +34,15 @@ config = {
 --pitchResponse:    Weight of the pitch drive request when determining the leg's height response.
 --rollResponse:     Weight of the roll drive request when determining the leg's height response.
 --heightDeviation:  Maximum the base standing height can change by due to pitch/roll request.
+--groundOffset:     Distance from leg root to ground vertically. Should be negative.
+--raiseOffset:      Distance from leg root to its highest raised position during the walk cycle. Should be greater than groundOffset.
 --rootLength:       Length of the segment attached to the root spinblock of the leg (the one directly attached to the hip).
 --kneeLength:       Length of the segment attached to the knee spinblock of the leg (the one attached to the root segment).
 --reach:            How far out from the root spinblock should the foot be, horizontally.
 
 legSettings = {
-  --{"name", ra, co, fr, yr, mr, pr, rr, hd, rl, kl, re};
-    {"test",  0,  0,  1,  0,  1,  0,  0,  0,  5,  9,  8};
+  --{"name", ra, co, fr, yr, mr, pr, rr, hd, go, ro, rl, kl, re};
+    {"test",  0,  0,  1,  0,  1,  0,  0,  0, -4, -2,  5,  9,  8};
 }
 
 --############################################################################
@@ -82,7 +84,7 @@ legController.mt = {__call = legController}
 
 --I: The "I" variable from the Update() function.
 --For other arguments, see the settings table at the top of the program.
-function legController.new(I, name, restAngle, cycleOffset, forwardResponse, yawResponse, mainResponse, pitchResponse, rollResponse, heightDeviation, rootLength, kneeLength, reach)
+function legController.new(I, name, restAngle, cycleOffset, forwardResponse, yawResponse, mainResponse, pitchResponse, rollResponse, heightDeviation, groundOffset, raiseOffset, rootLength, kneeLength, reach)
     local leg = {}
 
     leg.name = name
@@ -107,6 +109,8 @@ function legController.new(I, name, restAngle, cycleOffset, forwardResponse, yaw
     leg.pitchResponse = pitchResponse
     leg.rollResponse = rollResponse
     leg.heightDeviation = heightDeviation
+    leg.groundOffset = groundOffset or config.defaultGroundOffset
+    leg.raiseOffset = raiseOffset or config.defaultRaiseOffset
     leg.rootLength = rootLength
     leg.kneeLength = kneeLength
     leg.reach = reach or config.defaultReach
@@ -139,11 +143,11 @@ function legController.actionThread(leg, I)
 
         if stepLength == 0 then
             hipAngle = leg.restAngle
-            rootAngle, kneeAngle, footAngle = inverseKinematics.solveCoordinates(leg.reach, config.groundOffset + heightModifier, leg.rootLength, leg.kneeLength)
+            rootAngle, kneeAngle, footAngle = inverseKinematics.solveCoordinates(leg.reach, leg.groundOffset + heightModifier, leg.rootLength, leg.kneeLength)
         else
             hipAngle = stepLength * Mathf.Sin(cycleCounter * pi2) + leg.restAngle
             local stepCoeff = Mathf.Cos(cycleCounter * pi2)    --Should be clamped to [0, 1] but Mathf.Lerp() does that for us already.
-            local stepHeight = Mathf.Lerp(config.groundOffset, config.raiseOffset, stepCoeff)
+            local stepHeight = Mathf.Lerp(leg.groundOffset, leg.raiseOffset, stepCoeff)
 
             rootAngle, kneeAngle, footAngle = inverseKinematics.solveCoordinates(leg.reach / Mathf.Cos(hipAngle * rad), stepHeight + heightModifier, leg.rootLength, leg.kneeLength)
         end
