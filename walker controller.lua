@@ -32,7 +32,10 @@ config = {
     heightDriveDeltaCap = 1/40; --Maximum amount a leg's height drive response (pitch, roll) can change in a single tick. Exists to smooth out jerky motion.
 }
 
---(Terminology note: "Vertical" is the vehicle's own up/down axis, "lateral" is its left/right axis, and "medial" is its forward/backward axis.)
+--"Vertical" is the vehicle's own up/down axis, "lateral" is its left/right axis, and "medial" is its forward/backward axis.
+--Note that for the purposes of this program, lateral is *relative to the leg's orientation*, where lateral positive is away from the leg's root. 
+--I.e. The lateral positive of a leg on the left side of the craft is the craft's left, and the lateral positive of a leg on the right side of the craft is the craft's right.  
+
 --Add an unkeyed table for each leg on the craft into the following table, with these arguments in this order:
 
 --name:                 Name of leg, looks for all spinblocks named leg_<name>_<hip/root/knee/foot/ankle> to determine the spinblocks apart of this leg.
