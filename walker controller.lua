@@ -22,7 +22,7 @@ config = {
     cycleDuration = 2;          --Amount of time, in seconds, it takes for a single walk cycle to pass.
     deltaTime = 1/40;           --Amount of time, in seconds, that passes each tick. Should be 1/40th of a second, the length of an FTD physics step.
     walkDriveDeltaCap = 1/40;   --Maximum amount a leg's walking drive response (main, forward, yaw) can change in a single tick. Exists to smooth out jerky motion.
-    heightDriveDeltaCap = 1/80; --Maximum amount a leg's height drive response (pitch, roll) can change in a single tick. Exists to smooth out jerky motion.
+    heightDriveDeltaCap = 1/40; --Maximum amount a leg's height drive response (pitch, roll) can change in a single tick. Exists to smooth out jerky motion.
 }
 
 --Add an unkeyed table for each leg on the craft into the following table, with these arguments in this order:
