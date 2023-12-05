@@ -124,22 +124,21 @@ function legController.new(I, name, restAngle, cycleOffset, forwardResponse, yaw
 end
 
 function legController.actionThread(leg, I)
-    local cycleCounter, forwardRequest, yawRequest, mainRequest, totalRequest, pitchRequest, rollRequest, heightRequest, hipAngle, rootAngle, kneeAngle, footAngle, stepLength
+    local cycleCounter, forwardRequest, yawRequest, mainRequest, walkRequest, pitchRequest, rollRequest, heightRequest, hipAngle, rootAngle, kneeAngle, footAngle, stepLength, heightModifier
     stepLength = config.stepAngle
     
     while true do
         cycleCounter, forwardRequest, yawRequest, mainRequest, pitchRequest, rollRequest = coroutine.yield()
 
-        totalRequest = forwardRequest * leg.forwardResponse + yawRequest * leg.yawResponse + mainRequest * leg.mainResponse
+        walkRequest = forwardRequest * leg.forwardResponse + yawRequest * leg.yawResponse + mainRequest * leg.mainResponse
         heightRequest = pitchRequest * leg.pitchResponse + rollRequest * leg.rollResponse
 
-        local heightModifier = Mathf.Clamp(heightRequest, -1, 1) * leg.heightDeviation
+        heightModifier = Mathf.Clamp(heightRequest, -1, 1) * leg.heightDeviation
+        stepLength = config.stepAngle * Mathf.Clamp(walkRequest, -1, 1)
 
         cycleCounter = (cycleCounter + leg.cycleOffset) % 1
 
         rootAngle, kneeAngle, footAngle = 0, 0, 0
-
-        stepLength = config.stepAngle * Mathf.Clamp(totalRequest, -1, 1)
 
         if stepLength == 0 then
             hipAngle = leg.restAngle
