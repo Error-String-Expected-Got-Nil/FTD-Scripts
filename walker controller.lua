@@ -40,7 +40,7 @@ config = {
 --reach:            How far out from the root spinblock should the foot be, horizontally.
 
 legSettings = {
-  --{"name", ra, co, fr, yr, mr, pr, rr, hd, go, ro, rl, kl, re};
+  --{  name, ra, co, fr, yr, mr, pr, rr, hd, go, ro, rl, kl, re};
     {"test",  0,  0,  1,  0,  1,  0,  0,  0, -4, -2,  5,  9,  8};
 }
 
