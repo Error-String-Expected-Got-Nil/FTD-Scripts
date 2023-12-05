@@ -211,7 +211,7 @@ function Update(I)
         legController.spinblockList = spinblocks
 
         for index, settings in ipairs(legSettings) do
-            legController.new(I, table.unpack(settings))
+            legController.new(I, unpack(settings))
         end
 
         I:Log(startupLog)
