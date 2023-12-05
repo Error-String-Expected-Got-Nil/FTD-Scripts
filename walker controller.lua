@@ -51,7 +51,7 @@ config = {
 --rollResponse:         Response weight to roll drive in each axis. Roll should probably only use the vertical axis unless you're doing something weird. {v, l, m}
 --pitchResponse:        Response weight to pitch drive in each axis. Pitch should probably only use the vertical axis unless you're doing something weird. {v, l, m}
 --yawResponse:          Response weight to yaw drive in each axis. Yaw should probably only use the lateral and medial axes unless you're doing something weird. {v, l, m}
---forwardResponse:     Response weight to forward drive in each axis. Forward should probably only use the medial axis unless you're doing something weird. {v, l, m}
+--forwardResponse:      Response weight to forward drive in each axis. Forward should probably only use the medial axis unless you're doing something weird. {v, l, m}
 --hoverResponse:        Response weight to hover drive in each axis. Hover should probably only use the vertical axis unless you're doing something weird. {v, l, m}
 --strafeResponse:       Response weight to strafe drive in each axis. Strafe should probably only use the lateral axis unless you're doing something weird. {v, l, m}
 --rootLength            Length of the segment attached to the root joint spinblock, from the root joint spinblock to (and including) the knee joint spinblock.
