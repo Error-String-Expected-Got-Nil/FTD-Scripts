@@ -32,37 +32,34 @@ config = {
     heightDriveDeltaCap = 1/40; --Maximum amount a leg's height drive response (pitch, roll) can change in a single tick. Exists to smooth out jerky motion.
 }
 
---"Vertical" is the vehicle's own up/down axis, "lateral" is its left/right axis, and "medial" is its forward/backward axis.
---Note that for the purposes of this program, lateral is *relative to the leg's orientation*, where lateral positive is away from the leg's root. 
---I.e. The lateral positive of a leg on the left side of the craft is the craft's left, and the lateral positive of a leg on the right side of the craft is the craft's right.  
+--Terminology note: "Vertical", "lateral", and "medial" (v, l, m) are offsets from the position of a leg's root spinblock, relative to the leg's orientation.
+
+--For properly oriented legs, +v is always up, -v is always down. Lateral and medial depend on which side of the craft a leg is on, but should
+--      follow the rule that +l is the same direction as the side of the craft the leg is on, and -l the opposite. That is, +l should be right and -l should be left
+--      for a leg on the right side of the craft, and vice versa for the left. +m should be forward and -m should be backwards for legs on either the left or right.
+
+--You may simply want to fiddle around with positive and negative values depending on the leg to see what gets the kind of motion you want.
 
 --Add an unkeyed table for each leg on the craft into the following table, with these arguments in this order:
 
---name:                 Name of leg, looks for all spinblocks named leg_<name>_<hip/root/knee/foot/ankle> to determine the spinblocks apart of this leg.
---restReachMedial:      How far the foot should be from the root along the vehicle's medial axis while at rest.
---restReachLateral:     How far the foot should be from the root along the vehicle's lateral axis while at rest.
---cycleOffset:          Offset to the cycle of the leg. Used so you can, say, have half the legs off the ground and the other half on the ground while in motion.
---forwardResponse:      Weight of the forward drive request when determining the leg's medial response.
---mainResponse:         Weight of the main drive request when determining the leg's medial response.
---pitchResponse:        Weight of the pitch drive request when determining the leg's vertical response.
---rollResponse:         Weight of the roll drive request when determining the leg's vertical response.
---hoverResponse:        Weight of the hover drive request when determining the leg's vertical response.
---strafeResponse:       Weight of the strafe drive request when determining the leg's lateral response.
---yawResponseMedial:    Weight of the yaw drive request when determining the leg's medial response.
---yawResponseLateral:   Weight of the yaw drive request when determining the leg's lateral response.
---forwardStride:        Maximum distance forward from resting position in a step.
---backwardStride:       Maximum distance backward from resting position in a step.
---outStride:            Maximum distance from resting position, laterally away from the root, in a step. 
---inStride:             Maximum distance from resting position, laterally towards the root, in a step. 
---heightDeviation:      Maximum the base standing height can change by due to pitch/roll request.
---groundOffset:         Distance from leg root to ground vertically. Should be negative.
---raiseOffset:          Distance from leg root to its highest raised position during the walk cycle. Should be greater than groundOffset.
---rootLength:           Length of the segment attached to the root spinblock of the leg (the one directly attached to the hip). Includes knee spinblock!
---kneeLength:           Length of the segment attached to the knee spinblock of the leg (the one attached to the root segment). Includes foot spinblock!
+--name:                 Name of the leg. Used to look for the spinblocks that make it up, in the format "leg_<name>_<hip/root/knee/foot/ankle>".
+--cycleOffset:          Offset of the leg's walk cycle from the base, so they aren't all trying to get off the ground at the same time.
+--restPosition:         Table of offsets to determine where the foot's rest position is. {v, l, m}
+--maxPosition:          Maximum offsets for foot position in each axis. Each should be greater than the corresponding value for the axis in the rest position. {v, l, m}
+--minPosition:          Minimum offsets for foot position in each axis. Each should be less than the corresponding value for the axis in the rest position. {v, l, m}
+--mainResponse:         Response weight to main drive in each axis. Main should probably only use the medial axis unless you're doing something weird. {v, l, m}
+--rollResponse:         Response weight to roll drive in each axis. Roll should probably only use the vertical axis unless you're doing something weird. {v, l, m}
+--pitchResponse:        Response weight to pitch drive in each axis. Pitch should probably only use the vertical axis unless you're doing something weird. {v, l, m}
+--yawResponse:          Response weight to yaw drive in each axis. Yaw should probably only use the lateral and medial axes unless you're doing something weird. {v, l, m}
+--forwardResponse:     Response weight to forward drive in each axis. Forward should probably only use the medial axis unless you're doing something weird. {v, l, m}
+--hoverResponse:        Response weight to hover drive in each axis. Hover should probably only use the vertical axis unless you're doing something weird. {v, l, m}
+--strafeResponse:       Response weight to strafe drive in each axis. Strafe should probably only use the lateral axis unless you're doing something weird. {v, l, m}
+--rootLength            Length of the segment attached to the root joint spinblock, from the root joint spinblock to (and including) the knee joint spinblock.
+--kneeLength            Length of the segment attached to the knee joint spinblock, from the knee joint spinblock to (and including) the foot joint spinblock.
 
 legSettings = {
-  --{  name, rm, rl, co, fr, mr, pr, rr, hr, sr, ym, yl, fs, bs, os, is, hd, go, ro, rl, kl, re};
-    {"test",  0,  0,  0,  1,  1,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, -4, -2,  5,  9,  8};
+  --{     name, co, restp {v, l, m}, maxp {v, l, m}, minp {v, l, m}, mr {v, l, m}, rr {v, l, m}, pr {v, l, m}, yr {v, l, m},  fr {v, l, m}, hr {v, l, m}, sr {v, l, m}, rl, kl};
+  --{"example",  0,       {0, 0, 0},      {0, 0, 0},      {0, 0, 0},    {0, 0, 0},    {0, 0, 0},    {0, 0, 0},    {0, 0, 0},     {0, 0, 0},    {0, 0, 0},    {0, 0, 0},  0,  0};
 }
 
 
@@ -107,8 +104,8 @@ legController.mt = {__call = legController}
 
 --I: The "I" variable from the Update() function.
 --For other arguments, see the settings table at the top of the program.
-function legController.new(I, name, restReachMedial, restReachLateral, cycleOffset, forwardResponse, mainResponse, pitchResponse, rollResponse, hoverResponse, strafeResponse, 
-        yawResponseMedial, yawResponseLateral, forwardStride, backwardStride, outStride, inStride, heightDeviation, groundOffset, raiseOffset, rootLength, kneeLength)
+function legController.new(I, name, restPosition, maxPosition, minPosition, mainResponse, rollResponse, pitchResponse, yawResponse, forwardResponse, hoverResponse, strafeResponse, 
+            rootLength, kneeLength)
     local leg = {}
 
     leg.name = name
@@ -125,30 +122,7 @@ function legController.new(I, name, restReachMedial, restReachLateral, cycleOffs
     if not leg.footID then logBuffer("[WARN] Failed to find foot spinblock for leg \"" .. name .. "\"!") end
     if not leg.ankleID then logBuffer("[WARN] Failed to find ankle spinblock for leg \"" .. name .. "\"!") end
 
-    leg.restReachMedial = restReachMedial
-    leg.restReachLateral = restReachLateral
-
-    leg.cycleOffset = cycleOffset
-
-    leg.forwardResponse = forwardResponse
-    leg.yawResponse = yawResponse
-    leg.mainResponse = mainResponse
-    leg.pitchResponse = pitchResponse
-    leg.rollResponse = rollResponse
-    leg.hoverResponse = hoverResponse
-    leg.strafeResponse = strafeResponse
-
-    leg.forwardStride = forwardStride
-    leg.backwardStride = backwardStride
-    leg.outStride = outStride
-    leg.inStride = inStride
-
-    leg.heightDeviation = heightDeviation
-    leg.groundOffset = groundOffset
-    leg.raiseOffset = raiseOffset
-
-    leg.rootLength = rootLength
-    leg.kneeLength = kneeLength
+    --ASSIGN LEG VARIABLES HERE!! DON'T FORGET TO DO THAT!
 
     leg.controller = legController.newThread(leg, I)
     table.insert(legController.legList, leg)
