@@ -45,7 +45,7 @@ config = {
 --Add an unkeyed table for each leg on the craft into the following table, with these arguments in this order:
 
 --name:                 Name of the leg. Used to look for the spinblocks that make it up, in the format "leg_<name>_<hip/root/knee/foot/ankle>".
---cycleOffset:          Offset of the leg's walk cycle from the base, so they aren't all trying to get off the ground at the same time.
+--cycleOffset:          Offset of the leg's walk cycle from the base, so they aren't all trying to get off the ground at the same time. Should be on the range [0, 1).
 --restPosition:         Table of offsets to determine where the foot's rest position is. {v, l, m}
 --maxPosition:          Maximum offsets from rest for foot position in each axis. Each should be positive. {v, l, m}
 --minPosition:          Minimum offsets from rest for foot position in each axis. Each should be negative. {v, l, m}
@@ -59,9 +59,9 @@ config = {
 --rootLength            Length of the segment attached to the root joint spinblock, from the root joint spinblock to (and including) the knee joint spinblock.
 --kneeLength            Length of the segment attached to the knee joint spinblock, from the knee joint spinblock to (and including) the foot joint spinblock.
 
---The total response of a leg in a given axis equals the sum of the request in every drive, multiplied by that leg's response to that drive in the given axis, then clamped to
---     the range [-1, 1]. This number is then used as a coefficient to determine the direction and length of each step. Technically, a drive response greater than 1 or less
---     than -1 is valid, though usually has little practical use.
+--The total response of a leg in a given axis equals the sum of the request in each drive multiplied by that leg's response to that drive in the given axis, then clamped 
+--    to the range [-1, 1]. This number is then used as a coefficient to determine the direction and length of each step. Technically, a drive response greater than 1 or 
+--    less than -1 is valid, though usually has little practical use.
 
 legSettings = {
   --{     name, co, restp {v, l, m}, maxp {v, l, m}, minp {v, l, m}, mr {v, l, m}, rr {v, l, m}, pr {v, l, m}, yr {v, l, m},  fr {v, l, m}, hr {v, l, m}, sr {v, l, m}, rl, kl};
