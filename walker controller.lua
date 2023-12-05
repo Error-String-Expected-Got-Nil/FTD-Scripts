@@ -36,7 +36,9 @@ config = {
 
 --For properly oriented legs, +v is always up, -v is always down. Lateral and medial depend on which side of the craft a leg is on, but should
 --      follow the rule that +l is the same direction as the side of the craft the leg is on, and -l the opposite. That is, +l should be right and -l should be left
---      for a leg on the right side of the craft, and vice versa for the left. +m should be forward and -m should be backwards for legs on either the left or right.
+--      for a leg on the right side of the craft, and vice versa for the left. +m should be the direction the leg goes if its hip spinblock rotates in its positive
+--      direction (which should be clockwise if it's upright). You may want to ensure a positive rotation always means +m by adjusting the hip spinblock's global
+--      response, to make your settings more readable.
 
 --You may simply want to fiddle around with positive and negative values depending on the leg to see what gets the kind of motion you want.
 
@@ -45,8 +47,8 @@ config = {
 --name:                 Name of the leg. Used to look for the spinblocks that make it up, in the format "leg_<name>_<hip/root/knee/foot/ankle>".
 --cycleOffset:          Offset of the leg's walk cycle from the base, so they aren't all trying to get off the ground at the same time.
 --restPosition:         Table of offsets to determine where the foot's rest position is. {v, l, m}
---maxPosition:          Maximum offsets for foot position in each axis. Each should be greater than the corresponding value for the axis in the rest position. {v, l, m}
---minPosition:          Minimum offsets for foot position in each axis. Each should be less than the corresponding value for the axis in the rest position. {v, l, m}
+--maxPosition:          Maximum offsets from rest for foot position in each axis. Each should be positive. {v, l, m}
+--minPosition:          Minimum offsets from rest for foot position in each axis. Each should be negative. {v, l, m}
 --mainResponse:         Response weight to main drive in each axis. Main should probably only use the medial axis unless you're doing something weird. {v, l, m}
 --rollResponse:         Response weight to roll drive in each axis. Roll should probably only use the vertical axis unless you're doing something weird. {v, l, m}
 --pitchResponse:        Response weight to pitch drive in each axis. Pitch should probably only use the vertical axis unless you're doing something weird. {v, l, m}
