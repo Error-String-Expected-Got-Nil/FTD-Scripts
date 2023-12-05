@@ -15,9 +15,6 @@ function logBuffer(str) startupLog = startupLog .. str .. "\n" end
 --###########################################################################################
 
 config = {
-    defaultGroundOffset = -4;   --Distance from leg root to ground vertically. Should be negative.
-    defaultRaiseOffset = -2;    --Distance from leg root to height of foot vertically when it is lifted up during walk cycle. Should be greater than groundOffset.
-    defaultReach = 8;           --Distance from leg root to foot horizontally, away from the vehicle. Default if not set by individual leg.
     stepAngle = 30;             --Farthest angle, in degrees, a leg should move away from its default angle while moving.
     cycleDuration = 2;          --Amount of time, in seconds, it takes for a single walk cycle to pass.
     deltaTime = 1/40;           --Amount of time, in seconds, that passes each tick. Should be 1/40th of a second, the length of an FTD physics step.
@@ -112,11 +109,11 @@ function legController.new(I, name, restAngle, cycleOffset, forwardResponse, yaw
     leg.pitchResponse = pitchResponse
     leg.rollResponse = rollResponse
     leg.heightDeviation = heightDeviation
-    leg.groundOffset = groundOffset or config.defaultGroundOffset
-    leg.raiseOffset = raiseOffset or config.defaultRaiseOffset
+    leg.groundOffset = groundOffset
+    leg.raiseOffset = raiseOffset
     leg.rootLength = rootLength
     leg.kneeLength = kneeLength
-    leg.reach = reach or config.defaultReach
+    leg.reach = reach
 
     leg.controller = legController.newThread(leg, I)
     table.insert(legController.legList, leg)
