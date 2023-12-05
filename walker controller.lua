@@ -57,6 +57,10 @@ config = {
 --rootLength            Length of the segment attached to the root joint spinblock, from the root joint spinblock to (and including) the knee joint spinblock.
 --kneeLength            Length of the segment attached to the knee joint spinblock, from the knee joint spinblock to (and including) the foot joint spinblock.
 
+--The total response of a leg in a given axis equals the sum of the request in every drive, multiplied by that leg's response to that drive in the given axis, then clamped to
+--     the range [-1, 1]. This number is then used as a coefficient to determine the direction and length of each step. Technically, a drive response greater than 1 or less
+--     than -1 is valid, though usually has little practical use.
+
 legSettings = {
   --{     name, co, restp {v, l, m}, maxp {v, l, m}, minp {v, l, m}, mr {v, l, m}, rr {v, l, m}, pr {v, l, m}, yr {v, l, m},  fr {v, l, m}, hr {v, l, m}, sr {v, l, m}, rl, kl};
   --{"example",  0,       {0, 0, 0},      {0, 0, 0},      {0, 0, 0},    {0, 0, 0},    {0, 0, 0},    {0, 0, 0},    {0, 0, 0},     {0, 0, 0},    {0, 0, 0},    {0, 0, 0},  0,  0};
