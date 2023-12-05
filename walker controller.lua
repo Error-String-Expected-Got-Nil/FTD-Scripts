@@ -59,11 +59,12 @@ function inverseKinematics.solveExtension(rootLength, kneeLength, distance, angl
     local midpoint = (rootLength ^ 2 - kneeLength ^ 2) / (2 * distance) + (distance / 2)
 
     local rootAngle = Mathf.Acos(midpoint / rootLength)
-    local kneeAngle = Mathf.Acos((distance - midpoint) / kneeLength)
-    local footAngle = kneeAngle
+    local kneeAngle = -Mathf.Acos((distance - midpoint) / kneeLength)
+    local footAngle = -kneeAngle
 
+    kneeAngle = kneeAngle - rootAngle
     rootAngle = rootAngle + angleOffset
-    kneeAngle = kneeAngle + rootAngle
+    footAngle = footAngle - angleOffset
 
     return rootAngle, kneeAngle, footAngle
 end
