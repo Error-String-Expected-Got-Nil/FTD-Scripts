@@ -1,3 +1,13 @@
+--TODO:
+--  -Add hover axis control (link into pitch/roll)
+--  -Rework step length so it isn't based on an angle anymore
+--  -Use Lerp for steps (min distance backwards, max distance forwards)
+--  -Make step length leg-specific
+--  -Allow ankles to turn to ensure feet are in direction of motion
+--  -Add custom axis "splayLegs", stopping all leg motion and splaying the legs if it is at 1
+--  -Add strafe axis
+--  -Make yaw axis cause legs to move tangent to center of mass
+
 deg = Mathf.Rad2Deg
 rad = Mathf.Deg2Rad
 pi2 = Mathf.PI * 2
@@ -35,8 +45,8 @@ config = {
 --heightDeviation:  Maximum the base standing height can change by due to pitch/roll request.
 --groundOffset:     Distance from leg root to ground vertically. Should be negative.
 --raiseOffset:      Distance from leg root to its highest raised position during the walk cycle. Should be greater than groundOffset.
---rootLength:       Length of the segment attached to the root spinblock of the leg (the one directly attached to the hip).
---kneeLength:       Length of the segment attached to the knee spinblock of the leg (the one attached to the root segment).
+--rootLength:       Length of the segment attached to the root spinblock of the leg (the one directly attached to the hip). Includes knee spinblock!
+--kneeLength:       Length of the segment attached to the knee spinblock of the leg (the one attached to the root segment). Includes foot spinblock!
 --reach:            How far out from the root spinblock should the foot be, horizontally.
 
 legSettings = {
@@ -123,6 +133,7 @@ function legController.new(I, name, restAngle, cycleOffset, forwardResponse, yaw
     return leg
 end
 
+--At this rate I might just end up redoing this function entirely
 function legController.actionThread(leg, I)
     local cycleCounter, forwardRequest, yawRequest, mainRequest, walkRequest, pitchRequest, rollRequest, heightRequest, hipAngle, rootAngle, kneeAngle, footAngle, stepLength, heightModifier
     stepLength = config.stepAngle
