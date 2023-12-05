@@ -21,6 +21,8 @@ config = {
     stepAngle = 30;             --Farthest angle, in degrees, a leg should move away from its default angle while moving.
     cycleDuration = 2;          --Amount of time, in seconds, it takes for a single walk cycle to pass.
     deltaTime = 1/40;           --Amount of time, in seconds, that passes each tick. Should be 1/40th of a second, the length of an FTD physics step.
+    walkDriveDeltaCap = 1/40;   --Maximum amount a leg's walking drive response (main, forward, yaw) can change in a single tick. Exists to smooth out jerky motion.
+    heightDriveDeltaCap = 1/80; --Maximum amount a leg's height drive response (pitch, roll) can change in a single tick. Exists to smooth out jerky motion.
 }
 
 --Add an unkeyed table for each leg on the craft into the following table, with these arguments in this order:
@@ -127,6 +129,7 @@ end
 function legController.actionThread(leg, I)
     local cycleCounter, forwardRequest, yawRequest, mainRequest, walkRequest, pitchRequest, rollRequest, heightRequest, hipAngle, rootAngle, kneeAngle, footAngle, stepLength, heightModifier
     stepLength = config.stepAngle
+    local walkResponse, heightResponse = 0, 0
     
     while true do
         cycleCounter, forwardRequest, yawRequest, mainRequest, pitchRequest, rollRequest = coroutine.yield()
@@ -134,8 +137,11 @@ function legController.actionThread(leg, I)
         walkRequest = forwardRequest * leg.forwardResponse + yawRequest * leg.yawResponse + mainRequest * leg.mainResponse
         heightRequest = pitchRequest * leg.pitchResponse + rollRequest * leg.rollResponse
 
-        heightModifier = Mathf.Clamp(heightRequest, -1, 1) * leg.heightDeviation
-        stepLength = config.stepAngle * Mathf.Clamp(walkRequest, -1, 1)
+        walkResponse = walkResponse + Mathf.Clamp(walkRequest - walkResponse, -config.walkDriveDeltaCap, config.walkDriveDeltaCap)
+        heightResponse = heightResponse + Mathf.Clamp(heightRequest - heightResponse, -config.heightDriveDeltaCap, config.heightDriveDeltaCap)
+
+        heightModifier = Mathf.Clamp(heightResponse, -1, 1) * leg.heightDeviation
+        stepLength = config.stepAngle * Mathf.Clamp(walkResponse, -1, 1)
 
         cycleCounter = (cycleCounter + leg.cycleOffset) % 1
 
