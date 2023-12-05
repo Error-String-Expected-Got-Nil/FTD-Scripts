@@ -39,8 +39,8 @@ config = {
 --reach:            How far out from the root spinblock should the foot be, horizontally.
 
 legSettings = {
-  --{"name", ra, co, fr, yr, mr, pr, rr, hd, rl, kl, r};
-    {"test",  0,  0,  1,  0,  1,  0,  0,  0,  5,  9, 8};
+  --{"name", ra, co, fr, yr, mr, pr, rr, hd, rl, kl, re};
+    {"test",  0,  0,  1,  0,  1,  0,  0,  0,  5,  9,  8};
 }
 
 --############################################################################
@@ -129,7 +129,7 @@ function legController.actionThread(leg, I)
         totalRequest = forwardRequest * leg.forwardResponse + yawRequest * leg.yawResponse + mainRequest * leg.mainResponse
         heightRequest = pitchRequest * leg.pitchResponse + rollRequest * leg.rollResponse
 
-        local heightModifier = heightRequest * leg.heightDeviation
+        local heightModifier = Mathf.Clamp(heightRequest, -1, 1) * leg.heightDeviation
 
         cycleCounter = (cycleCounter + leg.cycleOffset) % 1
 
@@ -216,7 +216,7 @@ function Update(I)
     end
 
     for index, leg in ipairs(legController.legList) do
-        coroutine.resume(leg.controller, cycleStopwatch, 0, 0, 0) 
+        coroutine.resume(leg.controller, cycleStopwatch, 0, 0, 0, 0, 0) 
     end
 
     cycleStopwatch = (cycleStopwatch + config.deltaTime / config.cycleDuration) % 1 
