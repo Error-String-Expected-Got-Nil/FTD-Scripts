@@ -158,7 +158,6 @@ function legController.actionThread(leg, I)
             rootAngle, kneeAngle, footAngle = inverseKinematics.solveCoordinates(leg.reach / Mathf.Cos(hipAngle * rad), stepHeight + heightModifier, leg.rootLength, leg.kneeLength)
         end
 
-        --Convert from radians to degrees:
         rootAngle, kneeAngle, footAngle = rootAngle * deg, kneeAngle * deg, footAngle * deg
         ankleAngle = -hipAngle
 
