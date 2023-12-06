@@ -14,6 +14,8 @@ function vlm(tab) return {v = tab[1], l = tab[2], m = tab[3]} end
 --#   It is highly configurable, and should be able to control the vast majority of walkers, even if    #  
 --#                                 they are using an unusual layout.                                   #
 --#                                                                                                     #
+--#                             By Error: String Expected, Got Nil (Esegn)                              #
+--#                                                                                                     #
 --#######################################################################################################
 
 --Terminology note: "Vertical", "lateral", and "medial" (v, l, m) are offsets from the position of a leg's root spinblock, relative to the leg's orientation. +v is up from the root,
