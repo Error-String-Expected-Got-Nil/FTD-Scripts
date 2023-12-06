@@ -2,21 +2,19 @@
 --  Add config option to use clampy feet instead of sticky feet
 --  Add config option to determine whether ankles exist, and locate legs from feet instead if they don't
 --      Clampy feet should always have ankles for simplicity, fail on startup if they don't.
---  Automatically clamp clampy feet when a leg goes down
---      Automatically determine "clamp cycle", to evenly spread clamp duty across all legs? Automatically configure clamp response for yaw?
 --  Ground height detection and adjustment
 --      config.automaticGroundSensing = true/false --Should each leg automatically adjust foot position based on ground level? 
 --      config.automaticRestHeight                 --If yes, how high should the craft rest?
 --                                                 --A leg's resting vertical axis is now an offset from this, and should usually be 0.
 
-deg = Mathf.Rad2Deg
-rad = Mathf.Deg2Rad
-pi2 = Mathf.PI * 2
-startupLog = ""
-function logBuffer(str) startupLog = startupLog .. str .. "\n" end
-function vlm(tab, tableName, name) 
+Deg = Mathf.Rad2Deg
+Rad = Mathf.Deg2Rad
+Pi2 = Mathf.PI * 2
+StartupLog = ""
+function LogBuffer(str) StartupLog = StartupLog .. str .. "\n" end
+function VLM(tab, tableName, name) 
     if not tab or not tab[1] or not tab[2] or not tab[3] then 
-        logBuffer("[WARN] One or more " .. tableName .. " settings for leg \"" .. name .. "\" were nil. Defaulting to {v = 0, l = 0, m = 0}.") 
+        LogBuffer("[WARN] One or more " .. tableName .. " settings for leg \"" .. name .. "\" were nil. Defaulting to {v = 0, l = 0, m = 0}.") 
         return {v = 0, l = 0, m = 0} 
     else 
         return {v = tab[1], l = tab[2], m = tab[3]} 
@@ -54,7 +52,7 @@ end
 
 --All leg joint spinblocks should be in "rotate at a speed determined by rate controller" mode, with spin rate set to maximum.
 
-config = {
+Config = {
     cycleDuration = 2;          --Amount of time, in seconds, it takes for a single walk cycle to complete.
     deltaTime = 1/40;           --Amount of time, in seconds, that passes each tick. Should be 1/40th of a second, the length of an FTD physics step.
     verticalDeltaCap = 1/40;    --Maximum amount total vertical response can change for any given leg in a single tick. Should be on the range (0, 2].
@@ -87,19 +85,30 @@ config = {
 --IMPORTANT NOTE: For vertical offsets, a positive value means the foot will raise more, which will cause the craft to go *down* more. 
 --      Slightly unintuitive, but will be kept this way for the sake of consistency.
 
-legSettings = {
+LegSettings = {
   --{     name, co, restp {v, l, m}, maxp {v, l, m}, minp {v, l, m}, sh, mr {v, l, m}, rr {v, l, m}, pr {v, l, m}, yr {v, l, m},  fr {v, l, m}, hr {v, l, m}, sr {v, l, m}};
   --{"example",  0,       {0, 0, 0},      {0, 0, 0},      {0, 0, 0},  0,    {0, 0, 0},    {0, 0, 0},    {0, 0, 0},    {0, 0, 0},     {0, 0, 0},    {0, 0, 0},    {0, 0, 0}};
-    {   "test", 0.5,     {-4, 1, 8},      {1, 6, 2}, {-1, -5.5, -2},  2,    {0, 1, 0},    {0, 0, 0},    {0, 0, 0},   {0, 0, -1},     {0, 0, 0},    {0, 0, 0},    {0, 0, 0}};
-    {  "test2",   0,     {-4, 1, 8},      {1, 6, 2}, {-1, -5.5, -2},  2,    {0, 1, 0},    {0, 0, 0},    {0, 0, 0},    {0, 0, 1},     {0, 0, 0},    {0, 0, 0},    {0, 0, 0}};
+    {   "test",  0,      {-4, 1, 8},      {1, 6, 2}, {-1, -5.5, -2},  2,    {0, 1, 0},    {0, 0, 0},    {0, 0, 0},   {0, 0, -1},     {0, 0, 0},    {0, 0, 0},    {0, 0, 0}};
 }
 
+--In the format [offset] = pulse strength:
+--When legs with the cycle offset 'offset' just touched the ground, output on the secondary drive at pulse strength. Only one of these will ever be active at any time.
+--When about to leave the ground, output on the tertiary drive at pulse strength.
+--Intended to help synchronize clampy feet on legs, but could be used for other things.
+StepSyncrhonizationPulses = {
+  --[0] = 1;
+    [0] = 0.95;
+}
+
+StepSynchronizationRequestSecondary = 0;
+StepSynchronizationRequestTertiary = 0;
 
 
---inverseKinematics uses RADIANS, not degrees!
-inverseKinematics = {}
 
-function inverseKinematics.solveExtension(rootLength, kneeLength, distance, angleOffset)
+--InverseKinematics uses RADIANS, not degrees!
+InverseKinematics = {}
+
+function InverseKinematics.solveExtension(rootLength, kneeLength, distance, angleOffset)
     angleOffset = angleOffset or 0
 
     local midpoint = (rootLength ^ 2 - kneeLength ^ 2) / (2 * distance) + (distance / 2)
@@ -115,31 +124,31 @@ function inverseKinematics.solveExtension(rootLength, kneeLength, distance, angl
     return rootAngle, kneeAngle, footAngle
 end
 
-function inverseKinematics.solveCoordinates(x, y, rootLength, kneeLength)
+function InverseKinematics.solveCoordinates(x, y, rootLength, kneeLength)
     local angleOffset = Mathf.Atan2(y, x)
     local distance = (x ^ 2 + y ^ 2) ^ 0.5
 
-    return inverseKinematics.solveExtension(rootLength, kneeLength, distance, angleOffset)
+    return InverseKinematics.solveExtension(rootLength, kneeLength, distance, angleOffset)
 end
 
 
 
-legController = {}
-legController.spinblockList = {}
-legController.legList = {}
+LegController = {}
+LegController.spinblockList = {}
+LegController.legList = {}
 
 --I: The "I" variable from the Update() function.
 --For other arguments, see the settings table at the top of the program.
-function legController.new(I, name, cycleOffset, restPosition, maxPosition, minPosition, stepHeight, mainResponse, rollResponse, pitchResponse, yawResponse, forwardResponse, 
+function LegController.new(I, name, cycleOffset, restPosition, maxPosition, minPosition, stepHeight, mainResponse, rollResponse, pitchResponse, yawResponse, forwardResponse, 
             hoverResponse, strafeResponse)
     local leg = {}
 
-    logBuffer("Creating new leg \"" .. name .. "\"")
+    LogBuffer("Creating new leg \"" .. name .. "\"")
 
     leg.name = name
 
-    leg.ankleID = legController.spinblockList[name]
-    if not leg.ankleID then logBuffer("[WARN] Failed to find ankle spinblock for leg \"" .. name .. "\"! Cannot construct leg, discarding it.") return end
+    leg.ankleID = LegController.spinblockList[name]
+    if not leg.ankleID then LogBuffer("[WARN] Failed to find ankle spinblock for leg \"" .. name .. "\"! Cannot construct leg, discarding it.") return end
     leg.footID = I:GetParent(leg.ankleID)
     if not leg.footID then I:Log("[ERROR] Failed to find foot spinblock for leg \"" .. name .. "\"!") end
     leg.kneeID = I:GetParent(leg.footID)
@@ -154,26 +163,26 @@ function legController.new(I, name, cycleOffset, restPosition, maxPosition, minP
 
     leg.cycleOffset = cycleOffset
 
-    leg.restPosition = vlm(restPosition, "rest position", name)
-    leg.maxPosition = vlm(maxPosition, "max position", name)
-    leg.minPosition = vlm(minPosition, "min position", name)
+    leg.restPosition = VLM(restPosition, "rest position", name)
+    leg.maxPosition = VLM(maxPosition, "max position", name)
+    leg.minPosition = VLM(minPosition, "min position", name)
     leg.stepHeight = stepHeight
 
-    leg.mainResponse = vlm(mainResponse, "main response", name)
-    leg.rollResponse = vlm(rollResponse, "roll response", name)
-    leg.pitchResponse = vlm(pitchResponse, "pitch response", name)
-    leg.yawResponse = vlm(yawResponse, "yaw response", name)
-    leg.forwardResponse = vlm(forwardResponse, "forward response", name)
-    leg.hoverResponse = vlm(hoverResponse, "hover response", name)
-    leg.strafeResponse = vlm(strafeResponse, "strafe response", name)
+    leg.mainResponse = VLM(mainResponse, "main response", name)
+    leg.rollResponse = VLM(rollResponse, "roll response", name)
+    leg.pitchResponse = VLM(pitchResponse, "pitch response", name)
+    leg.yawResponse = VLM(yawResponse, "yaw response", name)
+    leg.forwardResponse = VLM(forwardResponse, "forward response", name)
+    leg.hoverResponse = VLM(hoverResponse, "hover response", name)
+    leg.strafeResponse = VLM(strafeResponse, "strafe response", name)
 
-    leg.controller = legController.newThread(leg, I)
-    table.insert(legController.legList, leg)
+    leg.controller = LegController.newThread(leg, I)
+    table.insert(LegController.legList, leg)
 
     return leg
 end
 
-function legController.actionThread(leg, I)
+function LegController.actionThread(leg, I)
     local verticalResponse, lateralResponse, medialResponse = 0, 0, 0
     local currentStepHeight = 0
       
@@ -191,40 +200,40 @@ function legController.actionThread(leg, I)
         local medialRequest = Mathf.Clamp(mainRequest * leg.mainResponse.m + rollRequest * leg.rollResponse.m + pitchRequest * leg.pitchResponse.m + yawRequest * leg.yawResponse.m
                 + forwardRequest * leg.forwardResponse.m + hoverRequest * leg.hoverResponse.m + strafeRequest * leg.strafeResponse.m, -1, 1)
 
-        verticalResponse = verticalResponse + Mathf.Clamp(verticalRequest - verticalResponse, -config.verticalDeltaCap, config.verticalDeltaCap)
-        lateralResponse = lateralResponse + Mathf.Clamp(lateralRequest - lateralResponse, -config.lateralDeltaCap, config.lateralDeltaCap)
-        medialResponse = medialResponse + Mathf.Clamp(medialRequest - medialResponse, -config.medialDeltaCap, config.medialDeltaCap)
+        verticalResponse = verticalResponse + Mathf.Clamp(verticalRequest - verticalResponse, -Config.verticalDeltaCap, Config.verticalDeltaCap)
+        lateralResponse = lateralResponse + Mathf.Clamp(lateralRequest - lateralResponse, -Config.lateralDeltaCap, Config.lateralDeltaCap)
+        medialResponse = medialResponse + Mathf.Clamp(medialRequest - medialResponse, -Config.medialDeltaCap, Config.medialDeltaCap)
 
-        if config.showHUDDebugInfo then I:LogToHud("name: " .. leg.name .. "\nvr: " .. verticalResponse .. "\nlr: " .. lateralResponse .. "\nmr: " .. medialResponse) end
+        if Config.showHUDDebugInfo then I:LogToHud("name: " .. leg.name .. "\nvr: " .. verticalResponse .. "\nlr: " .. lateralResponse .. "\nmr: " .. medialResponse) end
 
         local footPosition, ankleAngle
-        if Mathf.Abs(lateralResponse) < config.restDriveThreshold and Mathf.Abs(medialResponse) < config.restDriveThreshold then
+        if Mathf.Abs(lateralResponse) < Config.restDriveThreshold and Mathf.Abs(medialResponse) < Config.restDriveThreshold then
             --Smooth out step height reduction if drives were stopped in the middle of a step.
-            currentStepHeight = currentStepHeight + Mathf.Clamp(-currentStepHeight, -config.verticalDeltaCap * leg.stepHeight, config.verticalDeltaCap * leg.stepHeight)
+            currentStepHeight = currentStepHeight + Mathf.Clamp(-currentStepHeight, -Config.verticalDeltaCap * leg.stepHeight, Config.verticalDeltaCap * leg.stepHeight)
 
-            footPosition = Vector3(legController.getVerticalOffset(leg, verticalResponse) + currentStepHeight, leg.restPosition.l, leg.restPosition.m)
+            footPosition = Vector3(LegController.getVerticalOffset(leg, verticalResponse) + currentStepHeight, leg.restPosition.l, leg.restPosition.m)
             ankleAngle = 0
         else
             --Vector3 will be used to handle step positions; x is vertical, y is lateral, z is medial
-            local stepMax, stepMin = legController.getSteps(leg, verticalResponse, lateralResponse, medialResponse)
+            local stepMax, stepMin = LegController.getSteps(leg, verticalResponse, lateralResponse, medialResponse)
 
             --The position of the foot, discounting step height, at the current point in the cycle.
-            footPosition = Vector3.Lerp(stepMin, stepMax, (Mathf.Sin(cycle * pi2) + 1) / 2)
+            footPosition = Vector3.Lerp(stepMin, stepMax, (Mathf.Sin(cycle * Pi2) + 1) / 2)
 
             --Add the step height of the foot at the current point in the cycle.
-            currentStepHeight = leg.stepHeight * Mathf.Clamp(Mathf.Cos(cycle * pi2), 0, 1)
+            currentStepHeight = leg.stepHeight * Mathf.Clamp(Mathf.Cos(cycle * Pi2), 0, 1)
             footPosition.x = footPosition.x + currentStepHeight
 
             --Set ankle to point in direction of movement.
-            ankleAngle = deg * Mathf.Atan2(stepMin.z - stepMax.z, stepMax.y - stepMin.y)
+            ankleAngle = Deg * Mathf.Atan2(stepMin.z - stepMax.z, stepMax.y - stepMin.y)
             --But make sure it faces forward if we're walking backwards, because it looks nicer.
             if lateralResponse < 0 then ankleAngle = ankleAngle + 180 end
         end
 
         --Make hip point leg towards the target point, then solve inverse kinematics using horizontal distance from root to desired foot position and the height of the desired position.
-        local hipAngle = deg * Mathf.Atan2(footPosition.y, footPosition.z)
-        local rootAngle, kneeAngle, footAngle = inverseKinematics.solveCoordinates((footPosition.y ^ 2 + footPosition.z ^ 2) ^ 0.5, footPosition.x, leg.rootLength, leg.kneeLength)
-        rootAngle, kneeAngle, footAngle = rootAngle * deg, kneeAngle * deg, footAngle * deg
+        local hipAngle = Deg * Mathf.Atan2(footPosition.y, footPosition.z)
+        local rootAngle, kneeAngle, footAngle = InverseKinematics.solveCoordinates((footPosition.y ^ 2 + footPosition.z ^ 2) ^ 0.5, footPosition.x, leg.rootLength, leg.kneeLength)
+        rootAngle, kneeAngle, footAngle = rootAngle * Deg, kneeAngle * Deg, footAngle * Deg
 
         ankleAngle = ankleAngle - hipAngle
 
@@ -233,16 +242,24 @@ function legController.actionThread(leg, I)
         I:SetSpinBlockRotationAngle(leg.kneeID, kneeAngle)
         I:SetSpinBlockRotationAngle(leg.footID, footAngle)
         I:SetSpinBlockRotationAngle(leg.ankleID, ankleAngle)
+
+        if StepSyncrhonizationPulses[leg.cycleOffset] then
+            if StepSynchronizationRequestTertiary == 0 and cycle > 0.25 and cycle < 0.3 then
+                StepSynchronizationRequestTertiary = StepSyncrhonizationPulses[leg.cycleOffset]
+            elseif StepSynchronizationRequestSecondary == 0 and cycle > 0.7 and cycle < 0.75 then
+                StepSynchronizationRequestSecondary = StepSyncrhonizationPulses[leg.cycleOffset]
+            end
+        end
     end
 end
 
-function legController.newThread(leg, I)
-    local thread = coroutine.create(legController.actionThread)
+function LegController.newThread(leg, I)
+    local thread = coroutine.create(LegController.actionThread)
     coroutine.resume(thread, leg, I)
     return thread
 end
 
-function legController.getVerticalOffset(leg, vr)
+function LegController.getVerticalOffset(leg, vr)
     local vertical = leg.restPosition.v
 
     if vr < 0 then
@@ -255,8 +272,8 @@ function legController.getVerticalOffset(leg, vr)
 end
 
 --Returns the maximum step and the minimum step. Swaps lateral and medial coordinates as necessary to make steps go in the right direction when lerped.
-function legController.getSteps(leg, vr, lr, mr)
-    local vertical = legController.getVerticalOffset(leg, vr)
+function LegController.getSteps(leg, vr, lr, mr)
+    local vertical = LegController.getVerticalOffset(leg, vr)
 
     local lmax, lmin = leg.restPosition.l + leg.maxPosition.l * Mathf.Abs(lr), leg.restPosition.l + leg.minPosition.l * Mathf.Abs(lr)
     if lr < 0 then lmax, lmin = lmin, lmax end
@@ -269,7 +286,7 @@ end
 
 
 
-function indexNamedSpinblocks(I)
+function IndexNamedSpinblocks(I)
     local spinblocks = {}
 
     for i = 0, I:GetAllSubconstructsCount() - 1 do
@@ -285,27 +302,27 @@ function indexNamedSpinblocks(I)
     return spinblocks
 end
 
-isStartup = true
-spinblocks = {}
-cycleStopwatch = 0
+IsStartup = true
+Spinblocks = {}
+CycleStopwatch = 0
 
 function Update(I)
-    if isStartup then
+    if IsStartup then
         I:ClearLogs()
 
-        spinblocks = indexNamedSpinblocks(I)
+        Spinblocks = IndexNamedSpinblocks(I)
 
-        logBuffer("Detected the following named spinblocks:")
-        for k, v in pairs(spinblocks) do logBuffer(k .. " (" .. v .. ")") end
+        LogBuffer("Detected the following named spinblocks:")
+        for k, v in pairs(Spinblocks) do LogBuffer(k .. " (" .. v .. ")") end
 
-        legController.spinblockList = spinblocks
+        LegController.spinblockList = Spinblocks
 
-        for index, settings in ipairs(legSettings) do
-            legController.new(I, unpack(settings))
+        for index, settings in ipairs(LegSettings) do
+            LegController.new(I, unpack(settings))
         end
 
-        I:Log(startupLog)
-        isStartup = false
+        I:Log(StartupLog)
+        IsStartup = false
     end
 
     local mainDrive = I:GetPropulsionRequest(0)
@@ -316,9 +333,17 @@ function Update(I)
     local hoverDrive = I:GetPropulsionRequest(7)
     local strafeDrive = I:GetPropulsionRequest(8)
 
-    for index, leg in ipairs(legController.legList) do
-        coroutine.resume(leg.controller, cycleStopwatch, mainDrive, rollDrive, pitchDrive, yawDrive, forwardDrive, hoverDrive, strafeDrive) 
+    for index, leg in ipairs(LegController.legList) do
+        local resumeSuccess, message = coroutine.resume(leg.controller, CycleStopwatch, mainDrive, rollDrive, pitchDrive, yawDrive, forwardDrive, hoverDrive, strafeDrive) 
+
+        if not resumeSuccess and message ~= "cannot resume dead coroutine" then I:Log(message) end
     end
 
-    cycleStopwatch = (cycleStopwatch + config.deltaTime / config.cycleDuration) % 1 
+    CycleStopwatch = (CycleStopwatch + Config.deltaTime / Config.cycleDuration) % 1
+
+    I:SetPropulsionRequest(1, StepSynchronizationRequestSecondary)
+    I:SetPropulsionRequest(2, StepSynchronizationRequestTertiary)
+
+    StepSynchronizationRequestSecondary = 0
+    StepSynchronizationRequestTertiary = 0
 end
