@@ -205,7 +205,7 @@ function legController.actionThread(leg, I)
 
             --Set ankle to point in direction of movement.
             ankleAngle = deg * Mathf.Atan2(stepMin.z - stepMax.z, stepMax.y - stepMin.y)
-            --But make sure it faces forward if we're walking backwards
+            --But make sure it faces forward if we're walking backwards, because it looks nicer.
             if lateralResponse < 0 then ankleAngle = ankleAngle + 180 end
         end
 
