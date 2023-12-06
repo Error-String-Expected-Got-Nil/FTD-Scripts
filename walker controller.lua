@@ -1,3 +1,14 @@
+--TODO:
+--  Add config option to use clampy feet instead of sticky feet
+--  Add config option to determine whether ankles exist, and locate legs from feet instead if they don't
+--      Clampy feet should always have ankles for simplicity, fail on startup if they don't.
+--  Automatically clamp clampy feet when a leg goes down
+--      Automatically determine "clamp cycle", to evenly spread clamp duty across all legs? Automatically configure clamp response for yaw?
+--  Ground height detection and adjustment
+--      config.automaticGroundSensing = true/false --Should each leg automatically adjust foot position based on ground level? 
+--      config.automaticRestHeight                 --If yes, how high should the craft rest?
+--                                                 --A leg's resting vertical axis is now an offset from this, and should usually be 0.
+
 deg = Mathf.Rad2Deg
 rad = Mathf.Deg2Rad
 pi2 = Mathf.PI * 2
