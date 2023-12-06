@@ -1,6 +1,3 @@
---TODO:
---  -Allow ankles to turn to ensure feet are in direction of motion
-
 deg = Mathf.Rad2Deg
 rad = Mathf.Deg2Rad
 pi2 = Mathf.PI * 2
