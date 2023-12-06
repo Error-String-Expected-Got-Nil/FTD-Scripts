@@ -120,7 +120,7 @@ function legController.new(I, name, cycleOffset, restPosition, maxPosition, minP
     leg.name = name
 
     leg.ankleID = legController.spinblockList[name]
-    if not leg.ankleID then I:Log("[ERROR] Failed to find ankle spinblock for leg \"" .. name .. "\"!") end
+    if not leg.ankleID then I:Log("[ERROR] Failed to find ankle spinblock for leg \"" .. name .. "\"! Cannot construct leg, discarding it.") return end
     leg.footID = I:GetParent(leg.ankleID)
     if not leg.footID then I:Log("[ERROR] Failed to find foot spinblock for leg \"" .. name .. "\"!") end
     leg.kneeID = I:GetParent(leg.footID)
