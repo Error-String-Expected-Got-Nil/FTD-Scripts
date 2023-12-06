@@ -15,9 +15,9 @@ function vlm(tab) return {v = tab[1], l = tab[2], m = tab[3]} end
 --#                                                                                                     #
 --#######################################################################################################
 
---Terminology note: "Vertical", "lateral", and "medial" (v, l, m) are offsets from the position of a leg's root spinblock, relative to the leg's orientation. +v is up from the root,
---      -v is down, +l is forward, -l is backward, +m is away, and -m is toward. Note that the lateral direction can be reversed for a leg by making its hip spinblock rotate in
---       reverse, and it is recommended you adjust your legs so that +l/-l is forward/backward relative to the craft (though not required).
+--Terminology note: "vertical", "lateral", and "medial" (v, l, m) are offsets from the position of a leg's root spinblock, relative to the leg's orientation. +v is up from the root,
+--      -v is down, +l is forward, -l is backward, +m is away, and -m is toward. Note that the lateral direction can be reversed for a leg by setting its hip spinblock to power 
+--      scale -1, and it is recommended you adjust your legs so that +l/-l is forward/backward relative to the craft (though not required; this just makes configuring them easier).
 
 --Basic diagram of a splayed-out leg as viewed from the side. 'O' indicates a lateral spinblock, 'I' a vertical one, and '=' is a connecting segment.
 
@@ -31,7 +31,7 @@ function vlm(tab) return {v = tab[1], l = tab[2], m = tab[3]} end
 --Hip is attached to the craft, ankle to the sticky foot. Ankle ensures the foot is always pointing in the direction it is moving, foot spinblock ensures it is
 --      always parallel to the ground. Hip, root, and knee joints combine to allow for general articulation.
 
---Root, knee, and foot spinblocks should be oriented such that their segment moves upwards when they rotate clockwise. You can also put them in reverse mode for the same effect if 
+--Root, knee, and foot spinblocks should be oriented such that their segment moves upwards when they rotate clockwise. You can also set their power scale to -1 to reverse their response if
 --      you accidentally built them wrong.
 
 --All leg joint spinblocks should be in "rotate at a speed determined by rate controller" mode, with spin rate set to maximum.
@@ -42,6 +42,7 @@ config = {
     verticalDeltaCap = 1/40;    --Maximum amount total vertical response can change for any given leg in a single tick. Should be on the range (0, 1].
     lateralDeltaCap = 1/40;     --Maximum amount total lateral response can change for any given leg in a single tick. Should be on the range (0, 1].
     medialDeltaCap = 1/40;      --Maximum amount total medial response can change for any given leg in a single tick. Should be on the range (0, 1].
+    showHUDDebugInfo = false;   --Shows some debugging information on the HUD if true.
 }
 
 --Add an unkeyed table for each leg on the craft into the following table, with these arguments in this order:
@@ -60,16 +61,18 @@ config = {
 --hoverResponse:        Response weight to hover drive in each axis. Hover should probably only use the vertical axis unless you're doing something weird. {v, l, m}
 --strafeResponse:       Response weight to strafe drive in each axis. Strafe should probably only use the medial axis unless you're doing something weird. {v, l, m}
 
---The total response of a leg in a given axis equals the sum of the request in each drive multiplied by that leg's response to that drive in the given axis, then clamped 
---    to the range [-1, 1]. This number is then used as a coefficient to determine the direction and length of each step, where 0 means no movement, 1/-1 means a full stride,
---    positive means steps pull the craft in that direction, and negative means steps push the craft away from that direction.
+--The total response of a leg in a given axis equals the sum of each drive's request multiplied by the leg's response to that drive in the given axis, then clamped to the 
+--      range [-1, 1]. This number is then used as a coefficient to determine the direction and length of each step, where 0 means no movement, 1/-1 means a full stride,
+--      positive means steps pull the craft in that direction, and negative means steps push the craft away from that direction.
 
 --IMPORTANT NOTE: For vertical offsets, a positive value means the foot will raise more, which will cause the craft to go *down* more. 
---    Slightly unintuitive, but will be kept this way for the sake of consistency.
+--      Slightly unintuitive, but will be kept this way for the sake of consistency.
 
 legSettings = {
   --{     name, co, restp {v, l, m}, maxp {v, l, m}, minp {v, l, m}, sh, mr {v, l, m}, rr {v, l, m}, pr {v, l, m}, yr {v, l, m},  fr {v, l, m}, hr {v, l, m}, sr {v, l, m}};
   --{"example",  0,       {0, 0, 0},      {0, 0, 0},      {0, 0, 0},  0,    {0, 0, 0},    {0, 0, 0},    {0, 0, 0},    {0, 0, 0},     {0, 0, 0},    {0, 0, 0},    {0, 0, 0}};
+    {   "test",  0,      {-3, 0, 6},      {1, 6, 2}, {-1, -5.5, -2},  2,    {0, 1, 0},    {0, 0, 0},    {0, 0, 0},    {0, 0, 0},     {0, 0, 0},    {0, 0, 0},    {0, 0, 0}};
+    {  "test2",  0,      {-3, 0, 6},      {1, 6, 2}, {-1, -5.5, -2},  2,    {0, 1, 0},    {0, 0, 0},    {0, 0, 0},    {0, 0, 0},     {0, 0, 0},    {0, 0, 0},    {0, 0, 0}};
 }
 
 
@@ -113,21 +116,23 @@ function legController.new(I, name, cycleOffset, restPosition, maxPosition, minP
             hoverResponse, strafeResponse)
     local leg = {}
 
+    logBuffer("Creating new leg \"" .. name .. "\"")
+
     leg.name = name
 
     leg.ankleID = legController.spinblockList[name]
-    if not leg.ankleID then logBuffer("[ERROR] Failed to find ankle spinblock for leg \"" .. name .. "\"!") end
+    if not leg.ankleID then I:Log("[ERROR] Failed to find ankle spinblock for leg \"" .. name .. "\"!") end
     leg.footID = I:GetParent(leg.ankleID)
-    if not leg.footID then logBuffer("[ERROR] Failed to find foot spinblock for leg \"" .. name .. "\"!") end
+    if not leg.footID then I:Log("[ERROR] Failed to find foot spinblock for leg \"" .. name .. "\"!") end
     leg.kneeID = I:GetParent(leg.footID)
-    if not leg.kneeID then logBuffer("[ERROR] Failed to find knee spinblock for leg \"" .. name .. "\"!") end
+    if not leg.kneeID then I:Log("[ERROR] Failed to find knee spinblock for leg \"" .. name .. "\"!") end
     leg.rootID = I:GetParent(leg.kneeID)
-    if not leg.rootID then logBuffer("[ERROR] Failed to find root spinblock for leg \"" .. name .. "\"!") end
+    if not leg.rootID then I:Log("[ERROR] Failed to find root spinblock for leg \"" .. name .. "\"!") end
     leg.hipID = I:GetParent(leg.rootID)
-    if not leg.hipID then logBuffer("[ERROR] Failed to find hip spinblock for leg \"" .. name .. "\"!") end
+    if not leg.hipID then I:Log("[ERROR] Failed to find hip spinblock for leg \"" .. name .. "\"!") end
     
-    leg.rootLength = I:GetSubConstructInfo(kneeID).LocalPosition.magnitude
-    leg.kneeLength = I:GetSubConstructInfo(footID).LocalPosition.magnitude
+    leg.rootLength = I:GetSubConstructInfo(leg.kneeID).LocalPosition.magnitude
+    leg.kneeLength = I:GetSubConstructInfo(leg.footID).LocalPosition.magnitude
 
     leg.cycleOffset = cycleOffset
 
@@ -137,12 +142,12 @@ function legController.new(I, name, cycleOffset, restPosition, maxPosition, minP
     leg.stepHeight = stepHeight
 
     leg.mainResponse = vlm(mainResponse)
-    leg.rollResponse = vlm(mainResponse)
-    leg.pitchResponse = vlm(mainResponse)
-    leg.yawResponse = vlm(mainResponse)
-    leg.forwardResponse = vlm(mainResponse)
-    leg.hoverResponse = vlm(mainResponse)
-    leg.strafeResponse = vlm(mainResponse)
+    leg.rollResponse = vlm(rollResponse)
+    leg.pitchResponse = vlm(pitchResponse)
+    leg.yawResponse = vlm(yawResponse)
+    leg.forwardResponse = vlm(forwardResponse)
+    leg.hoverResponse = vlm(hoverResponse)
+    leg.strafeResponse = vlm(strafeResponse)
 
     leg.controller = legController.newThread(leg, I)
     table.insert(legController.legList, leg)
@@ -173,10 +178,12 @@ function legController.actionThread(leg, I)
         lateralResponse = lateralResponse + Mathf.Clamp(lateralRequest - lateralResponse, -config.lateralDeltaCap, config.lateralDeltaCap)
         medialResponse = medialResponse + Mathf.Clamp(medialRequest - medialResponse, -config.medialDeltaCap, config.medialDeltaCap)
 
+        if config.showHUDDebugInfo then I:LogToHud("name: " .. leg.name .. "\nvr: " .. verticalResponse .. "\nlr: " .. lateralResponse .. "\nmr: " .. medialResponse) end
+
         local footPosition, ankleAngle
-        if lateralResponse + medialResponse == 0 then
-            footPosition = Vector3(leg.restPosition.v + legController.getVerticalOffset(leg, verticalResponse), leg.restPosition.l, leg.restPosition.m)
-            ankleAngle = nil
+        if lateralResponse == 0 and medialResponse == 0 then
+            footPosition = Vector3(legController.getVerticalOffset(leg, verticalResponse), leg.restPosition.l, leg.restPosition.m)
+            ankleAngle = 0
         else
             --Vector3 will be used to handle step positions; x is vertical, y is lateral, z is medial
             local stepMax, stepMin = legController.getSteps(leg, verticalResponse, lateralResponse, medialResponse)
@@ -188,7 +195,7 @@ function legController.actionThread(leg, I)
             footPosition.x = footPosition.x + leg.stepHeight * Mathf.Clamp(Mathf.Cos(cycle * pi2), 0, 1)
 
             --Set ankle to point in direction of movement.
-            ankleAngle = deg * Mathf.Atan2(stepMax.y - stepMin.y, stepMax.z - stepMin.z)
+            ankleAngle = deg * Mathf.Atan2(stepMin.z - stepMax.z, stepMax.y - stepMin.y)
             --But make sure it faces forward if we're walking backwards
             if lateralResponse < 0 then ankleAngle = ankleAngle + 180 end
         end
@@ -198,10 +205,7 @@ function legController.actionThread(leg, I)
         local rootAngle, kneeAngle, footAngle = inverseKinematics.solveCoordinates((footPosition.y ^ 2 + footPosition.z ^ 2) ^ 0.5, footPosition.x, leg.rootLength, leg.kneeLength)
         rootAngle, kneeAngle, footAngle = rootAngle * deg, kneeAngle * deg, footAngle * deg
 
-        --If the leg is at rest, stepMax and stepMin weren't calculated, so we can't used that for the angle of the ankle. Instead we just set it correct for hip angle.
-        if ankleAngle == nil then
-            ankleAngle = -hipAngle
-        end
+        ankleAngle = ankleAngle - hipAngle
 
         I:SetSpinBlockRotationAngle(leg.hipID, hipAngle)
         I:SetSpinBlockRotationAngle(leg.rootID, rootAngle)
@@ -290,7 +294,6 @@ function Update(I)
     local forwardDrive = I:GetPropulsionRequest(6)
     local hoverDrive = I:GetPropulsionRequest(7)
     local strafeDrive = I:GetPropulsionRequest(8)
-    
 
     for index, leg in ipairs(legController.legList) do
         coroutine.resume(leg.controller, cycleStopwatch, mainDrive, rollDrive, pitchDrive, yawDrive, forwardDrive, hoverDrive, strafeDrive) 
