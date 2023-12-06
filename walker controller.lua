@@ -3,7 +3,14 @@ rad = Mathf.Deg2Rad
 pi2 = Mathf.PI * 2
 startupLog = ""
 function logBuffer(str) startupLog = startupLog .. str .. "\n" end
-function vlm(tab) return {v = tab[1], l = tab[2], m = tab[3]} end
+function vlm(tab, tableName, name) 
+    if not tab or not tab[1] or not tab[2] or not tab[3] then 
+        logBuffer("[WARN] One or more " .. tableName .. " settings for leg \"" .. name .. "\" were nil. Defaulting to {v = 0, l = 0, m = 0}.") 
+        return {v = 0, l = 0, m = 0} 
+    else 
+        return {v = tab[1], l = tab[2], m = tab[3]} 
+    end 
+end
 
 --#######################################################################################################
 --#                                                                                                     #
@@ -71,8 +78,8 @@ config = {
 legSettings = {
   --{     name, co, restp {v, l, m}, maxp {v, l, m}, minp {v, l, m}, sh, mr {v, l, m}, rr {v, l, m}, pr {v, l, m}, yr {v, l, m},  fr {v, l, m}, hr {v, l, m}, sr {v, l, m}};
   --{"example",  0,       {0, 0, 0},      {0, 0, 0},      {0, 0, 0},  0,    {0, 0, 0},    {0, 0, 0},    {0, 0, 0},    {0, 0, 0},     {0, 0, 0},    {0, 0, 0},    {0, 0, 0}};
-    {   "test",  0,      {-4, 1, 8},      {1, 6, 2}, {-1, -5.5, -2},  2,    {0, 1, 0},    {0, 0, 0},    {0, 0, 0},   {0, 0, -1},     {0, 0, 0},    {0, 0, 0},    {0, 0, 0}};
-    {  "test2",  0,      {-4, 1, 8},      {1, 6, 2}, {-1, -5.5, -2},  2,    {0, 1, 0},    {0, 0, 0},    {0, 0, 0},    {0, 0, 1},     {0, 0, 0},    {0, 0, 0},    {0, 0, 0}};
+    {   "test", 0.5,      {-4, 1, 8},      {1, 6, 2}, {-1, -5.5, -2},  2,    {0, 1, 0},    {0, 0, 0},    {0, 0, 0},   {0, 0, -1},     {0, 0, 0},    {0, 0, 0},    {0, 0, 0}};
+    {  "test2",   0,      {-4, 1, 8},      {1, 6, 2}, {-1, -5.5, -2},  2,    {0, 1, 0},    {0, 0, 0},    {0, 0, 0},    {0, 0, 1},     {0, 0, 0},    {0, 0, 0},    {0, 0, 0}};
 }
 
 
@@ -120,7 +127,7 @@ function legController.new(I, name, cycleOffset, restPosition, maxPosition, minP
     leg.name = name
 
     leg.ankleID = legController.spinblockList[name]
-    if not leg.ankleID then I:Log("[ERROR] Failed to find ankle spinblock for leg \"" .. name .. "\"! Cannot construct leg, discarding it.") return end
+    if not leg.ankleID then logBuffer("[WARN] Failed to find ankle spinblock for leg \"" .. name .. "\"! Cannot construct leg, discarding it.") return end
     leg.footID = I:GetParent(leg.ankleID)
     if not leg.footID then I:Log("[ERROR] Failed to find foot spinblock for leg \"" .. name .. "\"!") end
     leg.kneeID = I:GetParent(leg.footID)
@@ -135,18 +142,18 @@ function legController.new(I, name, cycleOffset, restPosition, maxPosition, minP
 
     leg.cycleOffset = cycleOffset
 
-    leg.restPosition = vlm(restPosition)
-    leg.maxPosition = vlm(maxPosition)
-    leg.minPosition = vlm(minPosition)
+    leg.restPosition = vlm(restPosition, "rest position", name)
+    leg.maxPosition = vlm(maxPosition, "max position", name)
+    leg.minPosition = vlm(minPosition, "min position", name)
     leg.stepHeight = stepHeight
 
-    leg.mainResponse = vlm(mainResponse)
-    leg.rollResponse = vlm(rollResponse)
-    leg.pitchResponse = vlm(pitchResponse)
-    leg.yawResponse = vlm(yawResponse)
-    leg.forwardResponse = vlm(forwardResponse)
-    leg.hoverResponse = vlm(hoverResponse)
-    leg.strafeResponse = vlm(strafeResponse)
+    leg.mainResponse = vlm(mainResponse, "main response", name)
+    leg.rollResponse = vlm(rollResponse, "roll response", name)
+    leg.pitchResponse = vlm(pitchResponse, "pitch response", name)
+    leg.yawResponse = vlm(yawResponse, "yaw response", name)
+    leg.forwardResponse = vlm(forwardResponse, "forward response", name)
+    leg.hoverResponse = vlm(hoverResponse, "hover response", name)
+    leg.strafeResponse = vlm(strafeResponse, "strafe response", name)
 
     leg.controller = legController.newThread(leg, I)
     table.insert(legController.legList, leg)
