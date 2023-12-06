@@ -1,13 +1,5 @@
 --TODO:
---  -Add hover axis control (link into pitch/roll)
---  -Rework step length so it isn't based on an angle anymore
---  -Use Lerp for steps (min distance backwards, max distance forwards)
---  -Make step length leg-specific
 --  -Allow ankles to turn to ensure feet are in direction of motion
---  -Add custom axis "splayLegs", stopping all leg motion and splaying the legs if it is at 1
---  -Add strafe axis
---  -Make yaw axis cause legs to move tangent to center of mass
---  -Automatically determine leg segment lengths
 
 deg = Mathf.Rad2Deg
 rad = Mathf.Deg2Rad
@@ -43,10 +35,10 @@ function vlm(tab) return {v = tab[1], l = tab[2], m = tab[3]} end
 --Root, knee, and foot spinblocks should be oriented such that their segment moves upwards when they rotate clockwise. You can also put them in reverse mode for the same effect if 
 --      you accidentally built them wrong.
 
---All spinblocks should be in "rotate at a speed determined by rate controller" mode, with spin rate set to maximum.
+--All leg joint spinblocks should be in "rotate at a speed determined by rate controller" mode, with spin rate set to maximum.
 
 config = {
-    cycleDuration = 2;          --Amount of time, in seconds, it takes for a single walk cycle to pass.
+    cycleDuration = 2;          --Amount of time, in seconds, it takes for a single walk cycle to complete.
     deltaTime = 1/40;           --Amount of time, in seconds, that passes each tick. Should be 1/40th of a second, the length of an FTD physics step.
     verticalDeltaCap = 1/40;    --Maximum amount total vertical response can change for any given leg in a single tick. Should be on the range (0, 1].
     lateralDeltaCap = 1/40;     --Maximum amount total lateral response can change for any given leg in a single tick. Should be on the range (0, 1].
@@ -58,9 +50,9 @@ config = {
 --name:                 Custom name set to to the ankle spinblock of the leg. The program finds this spinblock, then checks subobject parents upwards to find the foot, knee, root, and hip.
 --cycleOffset:          Offset of the leg's walk cycle from the base, so they aren't all trying to get off the ground at the same time. Should be on the range [0, 1).
 --restPosition:         Table of offsets to determine where the foot's rest position is. {v, l, m}
---maxPosition:          Maximum offsets from rest position for foot position in each axis. Each should be positive. {v, l, m}
---minPosition:          Minimum offsets from rest position for foot position in each axis. Each should be negative. {v, l, m}
---stepHeight:           How much the foot raises during a step. Should be positive.
+--maxPosition:          Maximum offsets from rest position for foot position in each axis, based on drive request. Each should be positive. {v, l, m}
+--minPosition:          Minimum offsets from rest position for foot position in each axis, based on drive request. Each should be negative. {v, l, m}
+--stepHeight:           How much the foot raises from the ground during a step. Should be positive.
 --mainResponse:         Response weight to main drive in each axis. Main should probably only use the lateral axis unless you're doing something weird. {v, l, m}
 --rollResponse:         Response weight to roll drive in each axis. Roll should probably only use the vertical axis unless you're doing something weird. {v, l, m}
 --pitchResponse:        Response weight to pitch drive in each axis. Pitch should probably only use the vertical axis unless you're doing something weird. {v, l, m}
@@ -70,8 +62,11 @@ config = {
 --strafeResponse:       Response weight to strafe drive in each axis. Strafe should probably only use the medial axis unless you're doing something weird. {v, l, m}
 
 --The total response of a leg in a given axis equals the sum of the request in each drive multiplied by that leg's response to that drive in the given axis, then clamped 
---    to the range [-1, 1]. This number is then used as a coefficient to determine the direction and length of each step. Technically, a drive response greater than 1 or 
---    less than -1 is valid, though usually has little practical use.
+--    to the range [-1, 1]. This number is then used as a coefficient to determine the direction and length of each step, where 0 means no movement, 1/-1 means a full stride,
+--    positive means steps pull the craft in that direction, and negative means steps push the craft away from that direction.
+
+--IMPORTANT NOTE: For vertical offsets, a positive value means the foot will raise more, which will cause the craft to go *down* more. 
+--    Slightly unintuitive, but will be kept this way for the sake of consistency.
 
 legSettings = {
   --{     name, co, restp {v, l, m}, maxp {v, l, m}, minp {v, l, m}, sh, mr {v, l, m}, rr {v, l, m}, pr {v, l, m}, yr {v, l, m},  fr {v, l, m}, hr {v, l, m}, sr {v, l, m}};
@@ -159,27 +154,61 @@ function legController.new(I, name, cycleOffset, restPosition, maxPosition, minP
 end
 
 function legController.actionThread(leg, I)
-    local cycle, mainRequest, rollRequest, pitchRequest, yawRequest, forwardRequest, hoverRequest, strafeRequest
-    local verticalRequest, lateralRequest, medialRequest 
     local verticalResponse, lateralResponse, medialResponse = 0, 0, 0
     
     while true do
-        cycle, mainRequest, rollRequest, pitchRequest, yawRequest, forwardRequest, hoverRequest, strafeRequest = coroutine.yield()
+        local cycle, mainRequest, rollRequest, pitchRequest, yawRequest, forwardRequest, hoverRequest, strafeRequest = coroutine.yield()
 
-        verticalRequest = mainRequest * leg.mainResponse.v + rollRequest * leg.rollResponse.v + pitchRequest * leg.pitchResponse.v + yawRequest * leg.yawResponse.v
-                + forwardRequest * leg.forwardResponse.v + hoverRequest * leg.hoverResponse.v + strafeRequest * leg.strafeResponse.v
+        cycle = (cycle + leg.cycleOffset) % 1
+
+        local verticalRequest = Mathf.Clamp(mainRequest * leg.mainResponse.v + rollRequest * leg.rollResponse.v + pitchRequest * leg.pitchResponse.v + yawRequest * leg.yawResponse.v
+                + forwardRequest * leg.forwardResponse.v + hoverRequest * leg.hoverResponse.v + strafeRequest * leg.strafeResponse.v, -1, 1)
         
-        lateralRequest = mainRequest * leg.mainResponse.l + rollRequest * leg.rollResponse.l + pitchRequest * leg.pitchResponse.l + yawRequest * leg.yawResponse.l
-                + forwardRequest * leg.forwardResponse.l + hoverRequest * leg.hoverResponse.l + strafeRequest * leg.strafeResponse.l
+        local lateralRequest = Mathf.Clamp(mainRequest * leg.mainResponse.l + rollRequest * leg.rollResponse.l + pitchRequest * leg.pitchResponse.l + yawRequest * leg.yawResponse.l
+                + forwardRequest * leg.forwardResponse.l + hoverRequest * leg.hoverResponse.l + strafeRequest * leg.strafeResponse.l, -1, 1)
         
-        medialRequest = mainRequest * leg.mainResponse.m + rollRequest * leg.rollResponse.m + pitchRequest * leg.pitchResponse.m + yawRequest * leg.yawResponse.m
-                + forwardRequest * leg.forwardResponse.m + hoverRequest * leg.hoverResponse.m + strafeRequest * leg.strafeResponse.m
+        local medialRequest = Mathf.Clamp(mainRequest * leg.mainResponse.m + rollRequest * leg.rollResponse.m + pitchRequest * leg.pitchResponse.m + yawRequest * leg.yawResponse.m
+                + forwardRequest * leg.forwardResponse.m + hoverRequest * leg.hoverResponse.m + strafeRequest * leg.strafeResponse.m, -1, 1)
 
         verticalResponse = verticalResponse + Mathf.Clamp(verticalRequest - verticalResponse, -config.verticalDeltaCap, config.verticalDeltaCap)
         lateralResponse = lateralResponse + Mathf.Clamp(lateralRequest - lateralResponse, -config.lateralDeltaCap, config.lateralDeltaCap)
         medialResponse = medialResponse + Mathf.Clamp(medialRequest - medialResponse, -config.medialDeltaCap, config.medialDeltaCap)
 
-        
+        local footPosition, ankleAngle
+        if lateralResponse + medialResponse == 0 then
+            footPosition = Vector3(leg.restPosition.v + legController.getVerticalOffset(leg, verticalResponse), leg.restPosition.l, leg.restPosition.m)
+            ankleAngle = nil
+        else
+            --Vector3 will be used to handle step positions; x is vertical, y is lateral, z is medial
+            local stepMax, stepMin = legController.getSteps(leg, verticalResponse, lateralResponse, medialResponse)
+
+            --The position of the foot, discounting step height, at the current point in the cycle.
+            footPosition = Vector3.Lerp(stepMin, stepMax, (Mathf.Sin(cycle * pi2) + 1) / 2)
+
+            --Add the step height of the foot at the current point in the cycle.
+            footPosition.x = footPosition.x + leg.stepHeight * Mathf.Clamp(Mathf.Cos(cycle * pi2), 0, 1)
+
+            --Set ankle to point in direction of movement.
+            ankleAngle = deg * Mathf.Atan2(stepMax.y - stepMin.y, stepMax.z - stepMin.z)
+            --But make sure it faces forward if we're walking backwards
+            if lateralResponse < 0 then ankleAngle = ankleAngle + 180 end
+        end
+
+        --Make hip point leg towards the target point, then solve inverse kinematics using horizontal distance from root to desired foot position and the height of the desired position.
+        local hipAngle = deg * Mathf.Atan2(footPosition.y, footPosition.z)
+        local rootAngle, kneeAngle, footAngle = inverseKinematics.solveCoordinates((footPosition.y ^ 2 + footPosition.z ^ 2) ^ 0.5, footPosition.x, leg.rootLength, leg.kneeLength)
+        rootAngle, kneeAngle, footAngle = rootAngle * deg, kneeAngle * deg, footAngle * deg
+
+        --If the leg is at rest, stepMax and stepMin weren't calculated, so we can't used that for the angle of the ankle. Instead we just set it correct for hip angle.
+        if ankleAngle == nil then
+            ankleAngle = -hipAngle
+        end
+
+        I:SetSpinBlockRotationAngle(leg.hipID, hipAngle)
+        I:SetSpinBlockRotationAngle(leg.rootID, rootAngle)
+        I:SetSpinBlockRotationAngle(leg.kneeID, kneeAngle)
+        I:SetSpinBlockRotationAngle(leg.footID, footAngle)
+        I:SetSpinBlockRotationAngle(leg.ankleID, ankleAngle)
     end
 end
 
@@ -189,12 +218,29 @@ function legController.newThread(leg, I)
     return thread
 end
 
-function legController.splay(leg, I)
-    I:SetSpinBlockRotationAngle(leg.hipID, 0)
-    I:SetSpinBlockRotationAngle(leg.rootID, 0)
-    I:SetSpinBlockRotationAngle(leg.kneeID, 0)
-    I:SetSpinBlockRotationAngle(leg.footID, 0)
-    I:SetSpinBlockRotationAngle(leg.ankleID, 0)
+function legController.getVerticalOffset(leg, vr)
+    local vertical = leg.restPosition.v
+
+    if vr < 0 then
+        vertical = vertical + leg.minPosition.v * Mathf.Abs(vr)
+    else
+        vertical = vertical + leg.maxPosition.v * Mathf.Abs(vr)
+    end
+
+    return vertical
+end
+
+--Returns the maximum step and the minimum step. Swaps lateral and medial coordinates as necessary to make steps go in the right direction when lerped.
+function legController.getSteps(leg, vr, lr, mr)
+    local vertical = legController.getVerticalOffset(leg, vr)
+
+    local lmax, lmin = leg.restPosition.l + leg.maxPosition.l * Mathf.Abs(lr), leg.restPosition.l + leg.minPosition.l * Mathf.Abs(lr)
+    if lr < 0 then lmax, lmin = lmin, lmax end
+
+    local mmax, mmin = leg.restPosition.m + leg.maxPosition.m * Mathf.Abs(mr), leg.restPosition.m + leg.minPosition.m * Mathf.Abs(mr)
+    if mr < 0 then mmax, mmin = mmin, mmax end
+
+    return Vector3(vertical, lmax, mmax), Vector3(vertical, lmin, mmin)
 end
 
 
