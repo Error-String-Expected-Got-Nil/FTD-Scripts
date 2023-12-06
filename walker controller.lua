@@ -71,8 +71,8 @@ config = {
 legSettings = {
   --{     name, co, restp {v, l, m}, maxp {v, l, m}, minp {v, l, m}, sh, mr {v, l, m}, rr {v, l, m}, pr {v, l, m}, yr {v, l, m},  fr {v, l, m}, hr {v, l, m}, sr {v, l, m}};
   --{"example",  0,       {0, 0, 0},      {0, 0, 0},      {0, 0, 0},  0,    {0, 0, 0},    {0, 0, 0},    {0, 0, 0},    {0, 0, 0},     {0, 0, 0},    {0, 0, 0},    {0, 0, 0}};
-    {   "test",  0,      {-3, 0, 6},      {1, 6, 2}, {-1, -5.5, -2},  2,    {0, 1, 0},    {0, 0, 0},    {0, 0, 0},    {0, 0, 0},     {0, 0, 0},    {0, 0, 0},    {0, 0, 0}};
-    {  "test2",  0,      {-3, 0, 6},      {1, 6, 2}, {-1, -5.5, -2},  2,    {0, 1, 0},    {0, 0, 0},    {0, 0, 0},    {0, 0, 0},     {0, 0, 0},    {0, 0, 0},    {0, 0, 0}};
+    {   "test",  0,      {-4, 1, 8},      {1, 6, 2}, {-1, -5.5, -2},  2,    {0, 1, 0},    {0, 0, 0},    {0, 0, 0},   {0, 0, -1},     {0, 0, 0},    {0, 0, 0},    {0, 0, 0}};
+    {  "test2",  0,      {-4, 1, 8},      {1, 6, 2}, {-1, -5.5, -2},  2,    {0, 1, 0},    {0, 0, 0},    {0, 0, 0},    {0, 0, 1},     {0, 0, 0},    {0, 0, 0},    {0, 0, 0}};
 }
 
 
@@ -159,6 +159,7 @@ end
 
 function legController.actionThread(leg, I)
     local verticalResponse, lateralResponse, medialResponse = 0, 0, 0
+    local currentStepHeight = 0
     
     while true do
         local cycle, mainRequest, rollRequest, pitchRequest, yawRequest, forwardRequest, hoverRequest, strafeRequest = coroutine.yield()
@@ -182,7 +183,10 @@ function legController.actionThread(leg, I)
 
         local footPosition, ankleAngle
         if lateralResponse == 0 and medialResponse == 0 then
-            footPosition = Vector3(legController.getVerticalOffset(leg, verticalResponse), leg.restPosition.l, leg.restPosition.m)
+            --Smooth out step height reduction if drives were stopped in the middle of a step.
+            currentStepHeight = currentStepHeight + Mathf.Clamp(-currentStepHeight, -config.verticalDeltaCap * leg.stepHeight, config.verticalDeltaCap * leg.stepHeight)
+
+            footPosition = Vector3(legController.getVerticalOffset(leg, verticalResponse) + currentStepHeight, leg.restPosition.l, leg.restPosition.m)
             ankleAngle = 0
         else
             --Vector3 will be used to handle step positions; x is vertical, y is lateral, z is medial
@@ -192,7 +196,8 @@ function legController.actionThread(leg, I)
             footPosition = Vector3.Lerp(stepMin, stepMax, (Mathf.Sin(cycle * pi2) + 1) / 2)
 
             --Add the step height of the foot at the current point in the cycle.
-            footPosition.x = footPosition.x + leg.stepHeight * Mathf.Clamp(Mathf.Cos(cycle * pi2), 0, 1)
+            currentStepHeight = leg.stepHeight * Mathf.Clamp(Mathf.Cos(cycle * pi2), 0, 1)
+            footPosition.x = footPosition.x + currentStepHeight
 
             --Set ankle to point in direction of movement.
             ankleAngle = deg * Mathf.Atan2(stepMin.z - stepMax.z, stepMax.y - stepMin.y)
