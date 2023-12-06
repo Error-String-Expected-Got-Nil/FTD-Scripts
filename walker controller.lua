@@ -49,6 +49,7 @@ config = {
     verticalDeltaCap = 1/40;    --Maximum amount total vertical response can change for any given leg in a single tick. Should be on the range (0, 2].
     lateralDeltaCap = 1/40;     --Maximum amount total lateral response can change for any given leg in a single tick. Should be on the range (0, 2].
     medialDeltaCap = 1/40;      --Maximum amount total medial response can change for any given leg in a single tick. Should be on the range (0, 2].
+    restDriveThreshold = 0.05;  --When the absolute value of lateral and medial response are both less than this value, a leg should be considered at rest and cease movement.
     showHUDDebugInfo = false;   --Shows some debugging information on the HUD if true.
 }
 
@@ -164,7 +165,7 @@ end
 function legController.actionThread(leg, I)
     local verticalResponse, lateralResponse, medialResponse = 0, 0, 0
     local currentStepHeight = 0
-    
+      
     while true do
         local cycle, mainRequest, rollRequest, pitchRequest, yawRequest, forwardRequest, hoverRequest, strafeRequest = coroutine.yield()
 
@@ -186,7 +187,7 @@ function legController.actionThread(leg, I)
         if config.showHUDDebugInfo then I:LogToHud("name: " .. leg.name .. "\nvr: " .. verticalResponse .. "\nlr: " .. lateralResponse .. "\nmr: " .. medialResponse) end
 
         local footPosition, ankleAngle
-        if lateralResponse == 0 and medialResponse == 0 then
+        if Mathf.Abs(lateralResponse) < config.restDriveThreshold and Mathf.Abs(medialResponse) < config.restDriveThreshold then
             --Smooth out step height reduction if drives were stopped in the middle of a step.
             currentStepHeight = currentStepHeight + Mathf.Clamp(-currentStepHeight, -config.verticalDeltaCap * leg.stepHeight, config.verticalDeltaCap * leg.stepHeight)
 
