@@ -108,7 +108,6 @@ end
 legController = {}
 legController.spinblockList = {}
 legController.legList = {}
-legController.mt = {__call = legController}
 
 --I: The "I" variable from the Update() function.
 --For other arguments, see the settings table at the top of the program.
@@ -151,8 +150,6 @@ function legController.new(I, name, cycleOffset, restPosition, maxPosition, minP
 
     leg.controller = legController.newThread(leg, I)
     table.insert(legController.legList, leg)
-
-    setmetatable(leg, legController.mt)
 
     return leg
 end
