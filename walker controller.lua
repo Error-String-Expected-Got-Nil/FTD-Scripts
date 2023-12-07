@@ -64,7 +64,7 @@ Config = {
     showHUDDebugInfo = false;   --Shows some debugging information on the HUD if true.
     stepPulseOnChannel = 1;     --Which drive index to output on when a leg sends a "about to touch ground" synchronization pulse.
     stepPulseOffChannel = 2;    --Which drive index to output on when a leg sends a "about to leave ground" synchronization pulse.
-    adaptiveFooting = true;     --If true, legs will ignore their given vertical rest position and instead adapt to the terrain and attempt to bring the craft's position to a given height. 
+    adaptiveFooting = false;    --If true, legs will ignore vertical requests and instead adapt to the terrain and attempt to bring the craft's position to a given height. 
     adaptiveRestHeight = 4;     --Height the craft should be while adaptiveFooting is on.
 }
 
@@ -220,31 +220,17 @@ function LegController.actionThread(leg, I)
             --Smooth out step height reduction if drives were stopped in the middle of a step.
             currentStepHeight = currentStepHeight + Mathf.Clamp(-currentStepHeight, -Config.verticalDeltaCap * leg.stepHeight, Config.verticalDeltaCap * leg.stepHeight)
 
-            --TODO: Handle adaptive footing while at rest 
+            footPosition = Vector3(0, leg.restPosition.l, leg.restPosition.m)
 
-            footPosition = Vector3(LegController.getVerticalOffset(leg, verticalResponse) + currentStepHeight, leg.restPosition.l, leg.restPosition.m)
+            footPosition.x = LegController.getVerticalOffset(leg, verticalResponse)
+
+            footPosition.x = footPosition.x + currentStepHeight
         else
             --Vector3 will be used to handle step positions; x is vertical, y is lateral, z is medial
             local stepMax, stepMin = LegController.getSteps(leg, verticalResponse, lateralResponse, medialResponse)
 
             --The position of the foot, discounting step height, at the current point in the cycle.
             footPosition = Vector3.Lerp(stepMin, stepMax, (Mathf.Sin(cycle * Pi2) + 1) / 2)
-
-            --Handle adaptive footing, if it is enabled.
-            if Config.adaptiveFooting then do
-                local craftPosition = I:GetConstructPosition()
-                local craftGroundAltitude = I:GetTerrainAltitudeForPosition(craftPosition)
-                --Technically the below uses the foot's *current* world position, not the desired world position, as calculating that from VLM position would be hellish.
-                --I'm figuring it's probably fine since it should correct itself in a tick or two, and only be wrong by a little bit. I think. If I don't fix this, I was right. 
-                local footGroundAltitude = I:GetTerrainAltitudeForPosition(I:GetSubConstructInfo(leg.ankleID).Position)
-                local rootPosition = I:GetSubConstructInfo(leg.rootID).Position
-
-                local verticalOffset = rootPosition.y - footGroundAltitude + Config.adaptiveRestHeight - craftPosition.y + craftGroundAltitude
-
-                footPosition.x = -verticalOffset
-
-                --TODO: Make sure this actually works!
-            end end
 
             --Add the step height of the foot at the current point in the cycle.
             currentStepHeight = leg.stepHeight * Mathf.Clamp(Mathf.Cos(cycle * Pi2), 0, 1)
@@ -270,7 +256,7 @@ function LegController.actionThread(leg, I)
         I:SetSpinBlockRotationAngle(leg.ankleID, ankleAngle)
 
         if StepSyncrhonizationPulses[leg.cycleOffset] and shouldSynchronizeSteps then
-            if StepSynchronizationRequestSecondary == 0 and cycle > 0.20 and cycle < 0.25 then
+            if StepSynchronizationRequestSecondary == 0 and cycle > 0.2 and cycle < 0.25 then
                 StepSynchronizationRequestSecondary = StepSyncrhonizationPulses[leg.cycleOffset]
             elseif StepSynchronizationRequestTertiary == 0 and cycle > 0.7 and cycle < 0.75 then
                 StepSynchronizationRequestTertiary = StepSyncrhonizationPulses[leg.cycleOffset]
