@@ -56,16 +56,16 @@ end
 
 Config = {
     cycleDuration = 1;          --Amount of time, in seconds, it takes for a single walk cycle to complete.
-    verticalDeltaCap = 1/10;    --Maximum amount total vertical response can change for any given leg in a single tick. Should be on the range (0, 2].
-    lateralDeltaCap = 1/40;     --Maximum amount total lateral response can change for any given leg in a single tick. Should be on the range (0, 2].
-    medialDeltaCap = 1/40;      --Maximum amount total medial response can change for any given leg in a single tick. Should be on the range (0, 2].
-                                    --TODO: Account for game speed when applying these to make them per second instead of per tick
+    verticalDeltaCap = 4;       --Maximum amount total vertical response can change for any given leg per second.
+    lateralDeltaCap = 1;        --Maximum amount total lateral response can change for any given leg per second.
+    medialDeltaCap = 1;         --Maximum amount total medial response can change for any given leg per second.
     restDriveThreshold = 0.02;  --When the absolute value of lateral and medial response are both less than this value, a leg should be considered at rest and cease movement.
     showHUDDebugInfo = false;   --Shows some debugging information on the HUD if true.
     stepPulseOnChannel = 1;     --Which drive index to output on when a leg sends a "about to touch ground" synchronization pulse.
     stepPulseOffChannel = 2;    --Which drive index to output on when a leg sends a "about to leave ground" synchronization pulse.
-    adaptiveFooting = false;    --If true, legs will ignore vertical requests and instead adapt to the terrain and attempt to bring the craft's position to a given height. 
-    adaptiveRestHeight = 4;     --Height the craft should be while adaptiveFooting is on.
+    adaptiveFooting = true;     --If true, legs will attempt to adapt to craft rotation and terrain height to maintain level walking.
+    heightAdaptationRate = 1;   --For adaptive footing, when the ground height under the craft changes, do not immediately change the height used for adaptive footing, instead change
+                                --    it by this much per second. Makes movement smoother.
 }
 
 --Add an unkeyed table for each leg on the craft into the following table, with these arguments in this order:
@@ -191,6 +191,7 @@ end
 function LegController.actionThread(leg, I)
     local verticalResponse, lateralResponse, medialResponse = 0, 0, 0
     local currentStepHeight = 0
+    local craftGroundAltitudeTracker = I:GetTerrainAltitudeForPosition(I:GetConstructPosition())
 
     while true do
         local cycle, mainRequest, rollRequest, pitchRequest, yawRequest, forwardRequest, hoverRequest, strafeRequest = coroutine.yield()
@@ -206,11 +207,30 @@ function LegController.actionThread(leg, I)
         local medialRequest = Mathf.Clamp(mainRequest * leg.mainResponse.m + rollRequest * leg.rollResponse.m + pitchRequest * leg.pitchResponse.m + yawRequest * leg.yawResponse.m
                 + forwardRequest * leg.forwardResponse.m + hoverRequest * leg.hoverResponse.m + strafeRequest * leg.strafeResponse.m, -1, 1)
 
-        verticalResponse = verticalResponse + Mathf.Clamp(verticalRequest - verticalResponse, -Config.verticalDeltaCap, Config.verticalDeltaCap)
-        lateralResponse = lateralResponse + Mathf.Clamp(lateralRequest - lateralResponse, -Config.lateralDeltaCap, Config.lateralDeltaCap)
-        medialResponse = medialResponse + Mathf.Clamp(medialRequest - medialResponse, -Config.medialDeltaCap, Config.medialDeltaCap)
+        local vDeltaCap, lDeltaCap, mDeltaCap = Config.verticalDeltaCap * DeltaTime, Config.lateralDeltaCap * DeltaTime, Config.medialDeltaCap * DeltaTime
+
+        verticalResponse = verticalResponse + Mathf.Clamp(verticalRequest - verticalResponse, -vDeltaCap, vDeltaCap)
+        lateralResponse = lateralResponse + Mathf.Clamp(lateralRequest - lateralResponse, -lDeltaCap, lDeltaCap)
+        medialResponse = medialResponse + Mathf.Clamp(medialRequest - medialResponse, -mDeltaCap, mDeltaCap)
 
         if Config.showHUDDebugInfo then I:LogToHud("name: " .. leg.name .. "\nvr: " .. verticalResponse .. "\nlr: " .. lateralResponse .. "\nmr: " .. medialResponse) end
+
+        local adaptiveFootingModifier = 0
+        if Config.adaptiveFooting then do
+            local craftPosition = I:GetConstructPosition()
+            local craftGroundAltitude = I:GetTerrainAltitudeForPosition(craftPosition)
+            --Technically the below uses the foot's *current* world position, not the desired world position, as calculating that from VLM position would be hellish.
+            --I'm figuring it's probably fine since it should correct itself in a tick or two, and only be wrong by a little bit. I think. If I don't fix this, I was right. 
+            local footGroundAltitude = I:GetTerrainAltitudeForPosition(I:GetSubConstructInfo(leg.ankleID).Position)
+            local rootPosition = I:GetSubConstructInfo(leg.rootID).Position
+
+            local heightDeltaLimit = Config.heightAdaptationRate * DeltaTime
+            craftGroundAltitudeTracker = craftGroundAltitudeTracker + Mathf.Clamp(craftGroundAltitude - craftGroundAltitudeTracker, -heightDeltaLimit, heightDeltaLimit)
+
+            local verticalOffset = craftGroundAltitudeTracker - footGroundAltitude + craftPosition.y - rootPosition.y
+
+            adaptiveFootingModifier = -verticalOffset
+        end end
 
         local footPosition
         local ankleAngle = 0
@@ -221,16 +241,18 @@ function LegController.actionThread(leg, I)
             currentStepHeight = currentStepHeight + Mathf.Clamp(-currentStepHeight, -Config.verticalDeltaCap * leg.stepHeight, Config.verticalDeltaCap * leg.stepHeight)
 
             footPosition = Vector3(0, leg.restPosition.l, leg.restPosition.m)
-
             footPosition.x = LegController.getVerticalOffset(leg, verticalResponse)
 
-            footPosition.x = footPosition.x + currentStepHeight
+            footPosition.x = footPosition.x + adaptiveFootingModifier + currentStepHeight
         else
             --Vector3 will be used to handle step positions; x is vertical, y is lateral, z is medial
             local stepMax, stepMin = LegController.getSteps(leg, verticalResponse, lateralResponse, medialResponse)
 
             --The position of the foot, discounting step height, at the current point in the cycle.
             footPosition = Vector3.Lerp(stepMin, stepMax, (Mathf.Sin(cycle * Pi2) + 1) / 2)
+
+            --Handle adaptive footing.
+            footPosition.x = footPosition.x + adaptiveFootingModifier
 
             --Add the step height of the foot at the current point in the cycle.
             currentStepHeight = leg.stepHeight * Mathf.Clamp(Mathf.Cos(cycle * Pi2), 0, 1)
@@ -258,7 +280,7 @@ function LegController.actionThread(leg, I)
         if StepSyncrhonizationPulses[leg.cycleOffset] and shouldSynchronizeSteps then
             if StepSynchronizationRequestSecondary == 0 and cycle > 0.2 and cycle < 0.25 then
                 StepSynchronizationRequestSecondary = StepSyncrhonizationPulses[leg.cycleOffset]
-            elseif StepSynchronizationRequestTertiary == 0 and cycle > 0.7 and cycle < 0.75 then
+            elseif StepSynchronizationRequestTertiary == 0 and cycle > 0.75 and cycle < 0.8 then
                 StepSynchronizationRequestTertiary = StepSyncrhonizationPulses[leg.cycleOffset]
             end
         end
