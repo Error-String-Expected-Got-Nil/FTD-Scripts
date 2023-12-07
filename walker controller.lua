@@ -60,7 +60,6 @@ Config = {
     lateralDeltaCap = 1;        --Maximum amount total lateral response can change for any given leg per second.
     medialDeltaCap = 1;         --Maximum amount total medial response can change for any given leg per second.
     restDriveThreshold = 0.02;  --When the absolute value of lateral and medial response are both less than this value, a leg should be considered at rest and cease movement.
-    showHUDDebugInfo = false;   --Shows some debugging information on the HUD if true.
     stepPulseOnChannel = 1;     --Which drive index to output on when a leg sends a "about to touch ground" synchronization pulse.
     stepPulseOffChannel = 2;    --Which drive index to output on when a leg sends a "about to leave ground" synchronization pulse.
     adaptiveFooting = true;     --If true, legs will attempt to adapt to craft rotation and terrain height to maintain level walking.
@@ -212,8 +211,6 @@ function LegController.actionThread(leg, I)
         verticalResponse = verticalResponse + Mathf.Clamp(verticalRequest - verticalResponse, -vDeltaCap, vDeltaCap)
         lateralResponse = lateralResponse + Mathf.Clamp(lateralRequest - lateralResponse, -lDeltaCap, lDeltaCap)
         medialResponse = medialResponse + Mathf.Clamp(medialRequest - medialResponse, -mDeltaCap, mDeltaCap)
-
-        if Config.showHUDDebugInfo then I:LogToHud("name: " .. leg.name .. "\nvr: " .. verticalResponse .. "\nlr: " .. lateralResponse .. "\nmr: " .. medialResponse) end
 
         local adaptiveFootingModifier = 0
         if Config.adaptiveFooting then do
