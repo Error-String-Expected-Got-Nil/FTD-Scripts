@@ -3,19 +3,23 @@
 --      config.automaticGroundSensing = true/false --Should each leg automatically adjust foot position based on ground level? 
 --      config.automaticRestHeight                 --If yes, how high should the craft rest?
 --                                                 --A leg's resting vertical axis is now an offset from this, and should usually be 0.
+--  Make adaptive footing attempt to keep the craft level?
+
+--ACCOUNT FOR INNATE ANGLE OFFSET IN rootAngle AND kneeAngle DUE TO PLACEMENT! THEY MIGHT NOT BE PERFECTLY ALIGNED IN A STRAIGHT LINE
+--NEED TO FIX THAT BEFORE USING ON AN ACTUAL CRAFT
 
 Deg = Mathf.Rad2Deg
 Rad = Mathf.Deg2Rad
 Pi2 = Mathf.PI * 2
 StartupLog = ""
 function LogBuffer(str) StartupLog = StartupLog .. str .. "\n" end
-function VLM(tab, tableName, name) 
-    if not tab or not tab[1] or not tab[2] or not tab[3] then 
-        LogBuffer("[WARN] One or more " .. tableName .. " settings for leg \"" .. name .. "\" were nil. Defaulting to {v = 0, l = 0, m = 0}.") 
-        return {v = 0, l = 0, m = 0} 
-    else 
-        return {v = tab[1], l = tab[2], m = tab[3]} 
-    end 
+function VLM(tab, tableName, name)
+    if not tab or not tab[1] or not tab[2] or not tab[3] then
+        LogBuffer("[WARN] One or more " .. tableName .. " settings for leg \"" .. name .. "\" were nil. Defaulting to {v = 0, l = 0, m = 0}.")
+        return {v = 0, l = 0, m = 0}
+    else
+        return {v = tab[1], l = tab[2], m = tab[3]}
+    end
 end
 
 --#######################################################################################################
@@ -54,10 +58,12 @@ Config = {
     verticalDeltaCap = 1/10;    --Maximum amount total vertical response can change for any given leg in a single tick. Should be on the range (0, 2].
     lateralDeltaCap = 1/40;     --Maximum amount total lateral response can change for any given leg in a single tick. Should be on the range (0, 2].
     medialDeltaCap = 1/40;      --Maximum amount total medial response can change for any given leg in a single tick. Should be on the range (0, 2].
-    restDriveThreshold = 0.05;  --When the absolute value of lateral and medial response are both less than this value, a leg should be considered at rest and cease movement.
+    restDriveThreshold = 0.02;  --When the absolute value of lateral and medial response are both less than this value, a leg should be considered at rest and cease movement.
     showHUDDebugInfo = false;   --Shows some debugging information on the HUD if true.
     stepPulseOnChannel = 1;     --Which drive index to output on when a leg sends a "about to touch ground" synchronization pulse.
     stepPulseOffChannel = 2;    --Which drive index to output on when a leg sends a "about to leave ground" synchronization pulse.
+    adaptiveFooting = true;     --If true, legs will ignore their given vertical rest position and instead adapt to the terrain and attempt to bring the craft's position to a given height. 
+    adaptiveRestHeight = 4;     --Height the craft should be while adaptiveFooting is on.
 }
 
 --Add an unkeyed table for each leg on the craft into the following table, with these arguments in this order:
@@ -137,7 +143,7 @@ LegController.legList = {}
 
 --I: The "I" variable from the Update() function.
 --For other arguments, see the settings table at the top of the program.
-function LegController.new(I, name, cycleOffset, restPosition, maxPosition, minPosition, stepHeight, mainResponse, rollResponse, pitchResponse, yawResponse, forwardResponse, 
+function LegController.new(I, name, cycleOffset, restPosition, maxPosition, minPosition, stepHeight, mainResponse, rollResponse, pitchResponse, yawResponse, forwardResponse,
             hoverResponse, strafeResponse)
     local leg = {}
 
@@ -155,7 +161,7 @@ function LegController.new(I, name, cycleOffset, restPosition, maxPosition, minP
     if not leg.rootID then I:Log("[ERROR] Failed to find root spinblock for leg \"" .. name .. "\"!") end
     leg.hipID = I:GetParent(leg.rootID)
     if not leg.hipID then I:Log("[ERROR] Failed to find hip spinblock for leg \"" .. name .. "\"!") end
-    
+
     leg.rootLength = I:GetSubConstructInfo(leg.kneeID).LocalPosition.magnitude
     leg.kneeLength = I:GetSubConstructInfo(leg.footID).LocalPosition.magnitude
 
@@ -183,7 +189,7 @@ end
 function LegController.actionThread(leg, I)
     local verticalResponse, lateralResponse, medialResponse = 0, 0, 0
     local currentStepHeight = 0
-      
+
     while true do
         local cycle, mainRequest, rollRequest, pitchRequest, yawRequest, forwardRequest, hoverRequest, strafeRequest = coroutine.yield()
 
@@ -191,10 +197,10 @@ function LegController.actionThread(leg, I)
 
         local verticalRequest = Mathf.Clamp(mainRequest * leg.mainResponse.v + rollRequest * leg.rollResponse.v + pitchRequest * leg.pitchResponse.v + yawRequest * leg.yawResponse.v
                 + forwardRequest * leg.forwardResponse.v + hoverRequest * leg.hoverResponse.v + strafeRequest * leg.strafeResponse.v, -1, 1)
-        
+
         local lateralRequest = Mathf.Clamp(mainRequest * leg.mainResponse.l + rollRequest * leg.rollResponse.l + pitchRequest * leg.pitchResponse.l + yawRequest * leg.yawResponse.l
                 + forwardRequest * leg.forwardResponse.l + hoverRequest * leg.hoverResponse.l + strafeRequest * leg.strafeResponse.l, -1, 1)
-        
+
         local medialRequest = Mathf.Clamp(mainRequest * leg.mainResponse.m + rollRequest * leg.rollResponse.m + pitchRequest * leg.pitchResponse.m + yawRequest * leg.yawResponse.m
                 + forwardRequest * leg.forwardResponse.m + hoverRequest * leg.hoverResponse.m + strafeRequest * leg.strafeResponse.m, -1, 1)
 
@@ -212,6 +218,8 @@ function LegController.actionThread(leg, I)
             --Smooth out step height reduction if drives were stopped in the middle of a step.
             currentStepHeight = currentStepHeight + Mathf.Clamp(-currentStepHeight, -Config.verticalDeltaCap * leg.stepHeight, Config.verticalDeltaCap * leg.stepHeight)
 
+            --TODO: Handle adaptive footing while at rest 
+
             footPosition = Vector3(LegController.getVerticalOffset(leg, verticalResponse) + currentStepHeight, leg.restPosition.l, leg.restPosition.m)
         else
             --Vector3 will be used to handle step positions; x is vertical, y is lateral, z is medial
@@ -219,6 +227,22 @@ function LegController.actionThread(leg, I)
 
             --The position of the foot, discounting step height, at the current point in the cycle.
             footPosition = Vector3.Lerp(stepMin, stepMax, (Mathf.Sin(cycle * Pi2) + 1) / 2)
+
+            --Handle adaptive footing, if it is enabled.
+            if Config.adaptiveFooting then do
+                local craftPosition = I:GetConstructPosition()
+                local craftGroundAltitude = I:GetTerrainAltitudeForPosition(craftPosition)
+                --Technically the below uses the foot's *current* world position, not the desired world position, as calculating that from VLM position would be hellish.
+                --I'm figuring it's probably fine since it should correct itself in a tick or two, and only be wrong by a little bit. I think. If I don't fix this, I was right. 
+                local footGroundAltitude = I:GetTerrainAltitudeForPosition(I:GetSubConstructInfo(leg.ankleID).Position)
+                local rootPosition = I:GetSubConstructInfo(leg.rootID).Position
+
+                local verticalOffset = rootPosition.y - footGroundAltitude + Config.adaptiveRestHeight - craftPosition.y + craftGroundAltitude
+
+                footPosition.x = -verticalOffset
+
+                --TODO: Make sure this actually works!
+            end end
 
             --Add the step height of the foot at the current point in the cycle.
             currentStepHeight = leg.stepHeight * Mathf.Clamp(Mathf.Cos(cycle * Pi2), 0, 1)
@@ -340,7 +364,7 @@ function Update(I)
     local strafeDrive = I:GetPropulsionRequest(8)
 
     for index, leg in ipairs(LegController.legList) do
-        local resumeSuccess, message = coroutine.resume(leg.controller, CycleStopwatch, mainDrive, rollDrive, pitchDrive, yawDrive, forwardDrive, hoverDrive, strafeDrive) 
+        local resumeSuccess, message = coroutine.resume(leg.controller, CycleStopwatch, mainDrive, rollDrive, pitchDrive, yawDrive, forwardDrive, hoverDrive, strafeDrive)
 
         if not resumeSuccess and message ~= "cannot resume dead coroutine" then I:Log(message) end
     end
