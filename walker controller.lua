@@ -1,7 +1,4 @@
 --TODO:
---  Add config option to use clampy feet instead of sticky feet
---  Add config option to determine whether ankles exist, and locate legs from feet instead if they don't
---      Clampy feet should always have ankles for simplicity, fail on startup if they don't.
 --  Ground height detection and adjustment
 --      config.automaticGroundSensing = true/false --Should each leg automatically adjust foot position based on ground level? 
 --      config.automaticRestHeight                 --If yes, how high should the craft rest?
@@ -207,7 +204,8 @@ function LegController.actionThread(leg, I)
 
         if Config.showHUDDebugInfo then I:LogToHud("name: " .. leg.name .. "\nvr: " .. verticalResponse .. "\nlr: " .. lateralResponse .. "\nmr: " .. medialResponse) end
 
-        local footPosition, ankleAngle
+        local footPosition
+        local ankleAngle = 0
 
         local shouldSynchronizeSteps = false
         if Mathf.Abs(lateralResponse) < Config.restDriveThreshold and Mathf.Abs(medialResponse) < Config.restDriveThreshold then
@@ -215,7 +213,6 @@ function LegController.actionThread(leg, I)
             currentStepHeight = currentStepHeight + Mathf.Clamp(-currentStepHeight, -Config.verticalDeltaCap * leg.stepHeight, Config.verticalDeltaCap * leg.stepHeight)
 
             footPosition = Vector3(LegController.getVerticalOffset(leg, verticalResponse) + currentStepHeight, leg.restPosition.l, leg.restPosition.m)
-            ankleAngle = 0
         else
             --Vector3 will be used to handle step positions; x is vertical, y is lateral, z is medial
             local stepMax, stepMin = LegController.getSteps(leg, verticalResponse, lateralResponse, medialResponse)
@@ -227,13 +224,11 @@ function LegController.actionThread(leg, I)
             currentStepHeight = leg.stepHeight * Mathf.Clamp(Mathf.Cos(cycle * Pi2), 0, 1)
             footPosition.x = footPosition.x + currentStepHeight
 
-            --Set ankle to point in direction of movement.
-            ankleAngle = Deg * Mathf.Atan2(stepMin.z - stepMax.z, stepMax.y - stepMin.y)
-            --But make sure it faces forward if we're walking backwards, because it looks nicer.
-            if lateralResponse < 0 then ankleAngle = ankleAngle + 180 end
-
             shouldSynchronizeSteps = true
         end
+
+        --Make sure leg doesn't try to extend farther than it's able to.
+        footPosition = Vector3.ClampMagnitude(footPosition, leg.rootLength + leg.kneeLength)
 
         --Make hip point leg towards the target point, then solve inverse kinematics using horizontal distance from root to desired foot position and the height of the desired position.
         local hipAngle = Deg * Mathf.Atan2(footPosition.y, footPosition.z)
