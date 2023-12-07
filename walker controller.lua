@@ -58,6 +58,7 @@ Config = {
     verticalDeltaCap = 1/10;    --Maximum amount total vertical response can change for any given leg in a single tick. Should be on the range (0, 2].
     lateralDeltaCap = 1/40;     --Maximum amount total lateral response can change for any given leg in a single tick. Should be on the range (0, 2].
     medialDeltaCap = 1/40;      --Maximum amount total medial response can change for any given leg in a single tick. Should be on the range (0, 2].
+                                    --TODO: Account for game speed when applying these to make them per second instead of per tick
     restDriveThreshold = 0.02;  --When the absolute value of lateral and medial response are both less than this value, a leg should be considered at rest and cease movement.
     showHUDDebugInfo = false;   --Shows some debugging information on the HUD if true.
     stepPulseOnChannel = 1;     --Which drive index to output on when a leg sends a "about to touch ground" synchronization pulse.
