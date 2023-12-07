@@ -53,14 +53,13 @@ end
 --All leg joint spinblocks should be in "rotate at a speed determined by rate controller" mode, with spin rate set to maximum.
 
 Config = {
-    cycleDuration = 2;          --Amount of time, in seconds, it takes for a single walk cycle to complete.
-    deltaTime = 1/40;           --Amount of time, in seconds, that passes each tick. Should be 1/40th of a second, the length of an FTD physics step.
-    verticalDeltaCap = 1/40;    --Maximum amount total vertical response can change for any given leg in a single tick. Should be on the range (0, 2].
+    cycleDuration = 1;          --Amount of time, in seconds, it takes for a single walk cycle to complete.
+    verticalDeltaCap = 1/10;    --Maximum amount total vertical response can change for any given leg in a single tick. Should be on the range (0, 2].
     lateralDeltaCap = 1/40;     --Maximum amount total lateral response can change for any given leg in a single tick. Should be on the range (0, 2].
     medialDeltaCap = 1/40;      --Maximum amount total medial response can change for any given leg in a single tick. Should be on the range (0, 2].
     restDriveThreshold = 0.05;  --When the absolute value of lateral and medial response are both less than this value, a leg should be considered at rest and cease movement.
     showHUDDebugInfo = false;   --Shows some debugging information on the HUD if true.
-    stepPulseOnChannel = 1;     --Which drive index to output on when a leg sends a "just touched ground" synchronization pulse.
+    stepPulseOnChannel = 1;     --Which drive index to output on when a leg sends a "about to touch ground" synchronization pulse.
     stepPulseOffChannel = 2;    --Which drive index to output on when a leg sends a "about to leave ground" synchronization pulse.
 }
 
@@ -94,7 +93,7 @@ LegSettings = {
 }
 
 --In the format [offset] = pulse strength:
---When legs with the cycle offset 'offset' just touched the ground, output on the stepPulseOnChannel at pulse strength. Only one of these will ever be active at any time.
+--When legs with the cycle offset 'offset' are about to touch the ground, output on the stepPulseOnChannel at pulse strength.
 --When about to leave the ground, output on the stepPulseOffChannel at pulse strength.
 --Intended to help synchronize clampy feet on legs, but could be used for other things.
 StepSyncrhonizationPulses = {
@@ -250,7 +249,7 @@ function LegController.actionThread(leg, I)
         I:SetSpinBlockRotationAngle(leg.ankleID, ankleAngle)
 
         if StepSyncrhonizationPulses[leg.cycleOffset] and shouldSynchronizeSteps then
-            if StepSynchronizationRequestSecondary == 0 and cycle > 0.25 and cycle < 0.3 then
+            if StepSynchronizationRequestSecondary == 0 and cycle > 0.20 and cycle < 0.25 then
                 StepSynchronizationRequestSecondary = StepSyncrhonizationPulses[leg.cycleOffset]
             elseif StepSynchronizationRequestTertiary == 0 and cycle > 0.7 and cycle < 0.75 then
                 StepSynchronizationRequestTertiary = StepSyncrhonizationPulses[leg.cycleOffset]
@@ -311,6 +310,9 @@ end
 IsStartup = true
 Spinblocks = {}
 CycleStopwatch = 0
+PreviousTime = 0
+Time = 0
+DeltaTime = 0
 
 function Update(I)
     if IsStartup then
@@ -326,6 +328,9 @@ function Update(I)
         for index, settings in ipairs(LegSettings) do
             LegController.new(I, unpack(settings))
         end
+
+        Time = I:GetTime()
+        PreviousTime = Time
 
         I:Log(StartupLog)
         IsStartup = false
@@ -345,11 +350,16 @@ function Update(I)
         if not resumeSuccess and message ~= "cannot resume dead coroutine" then I:Log(message) end
     end
 
-    CycleStopwatch = (CycleStopwatch + Config.deltaTime / Config.cycleDuration) % 1
+    Time = I:GetTime()
+    DeltaTime = Time - PreviousTime
+
+    CycleStopwatch = (CycleStopwatch + DeltaTime / Config.cycleDuration) % 1
 
     I:SetPropulsionRequest(Config.stepPulseOnChannel, StepSynchronizationRequestSecondary)
     I:SetPropulsionRequest(Config.stepPulseOffChannel, StepSynchronizationRequestTertiary)
 
     StepSynchronizationRequestSecondary = 0
     StepSynchronizationRequestTertiary = 0
+
+    PreviousTime = Time
 end
