@@ -7,6 +7,7 @@
 
 --ACCOUNT FOR INNATE ANGLE OFFSET IN rootAngle AND kneeAngle DUE TO PLACEMENT! THEY MIGHT NOT BE PERFECTLY ALIGNED IN A STRAIGHT LINE
 --NEED TO FIX THAT BEFORE USING ON AN ACTUAL CRAFT
+--Also need to determine whether VLM is actually relative to root or hip position as-coded and fix it to root position if it's wrong
 
 Deg = Mathf.Rad2Deg
 Rad = Mathf.Deg2Rad
