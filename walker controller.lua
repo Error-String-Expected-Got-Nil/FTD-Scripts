@@ -60,6 +60,8 @@ Config = {
     medialDeltaCap = 1/40;      --Maximum amount total medial response can change for any given leg in a single tick. Should be on the range (0, 2].
     restDriveThreshold = 0.05;  --When the absolute value of lateral and medial response are both less than this value, a leg should be considered at rest and cease movement.
     showHUDDebugInfo = false;   --Shows some debugging information on the HUD if true.
+    stepPulseOnChannel = 1;     --Which drive index to output on when a leg sends a "just touched ground" synchronization pulse.
+    stepPulseOffChannel = 2;    --Which drive index to output on when a leg sends a "about to leave ground" synchronization pulse.
 }
 
 --Add an unkeyed table for each leg on the craft into the following table, with these arguments in this order:
@@ -92,8 +94,8 @@ LegSettings = {
 }
 
 --In the format [offset] = pulse strength:
---When legs with the cycle offset 'offset' just touched the ground, output on the secondary drive at pulse strength. Only one of these will ever be active at any time.
---When about to leave the ground, output on the tertiary drive at pulse strength.
+--When legs with the cycle offset 'offset' just touched the ground, output on the stepPulseOnChannel at pulse strength. Only one of these will ever be active at any time.
+--When about to leave the ground, output on the stepPulseOffChannel at pulse strength.
 --Intended to help synchronize clampy feet on legs, but could be used for other things.
 StepSyncrhonizationPulses = {
   --[0] = 1;
@@ -207,6 +209,8 @@ function LegController.actionThread(leg, I)
         if Config.showHUDDebugInfo then I:LogToHud("name: " .. leg.name .. "\nvr: " .. verticalResponse .. "\nlr: " .. lateralResponse .. "\nmr: " .. medialResponse) end
 
         local footPosition, ankleAngle
+
+        local shouldSynchronizeSteps = false
         if Mathf.Abs(lateralResponse) < Config.restDriveThreshold and Mathf.Abs(medialResponse) < Config.restDriveThreshold then
             --Smooth out step height reduction if drives were stopped in the middle of a step.
             currentStepHeight = currentStepHeight + Mathf.Clamp(-currentStepHeight, -Config.verticalDeltaCap * leg.stepHeight, Config.verticalDeltaCap * leg.stepHeight)
@@ -228,6 +232,8 @@ function LegController.actionThread(leg, I)
             ankleAngle = Deg * Mathf.Atan2(stepMin.z - stepMax.z, stepMax.y - stepMin.y)
             --But make sure it faces forward if we're walking backwards, because it looks nicer.
             if lateralResponse < 0 then ankleAngle = ankleAngle + 180 end
+
+            shouldSynchronizeSteps = true
         end
 
         --Make hip point leg towards the target point, then solve inverse kinematics using horizontal distance from root to desired foot position and the height of the desired position.
@@ -243,11 +249,11 @@ function LegController.actionThread(leg, I)
         I:SetSpinBlockRotationAngle(leg.footID, footAngle)
         I:SetSpinBlockRotationAngle(leg.ankleID, ankleAngle)
 
-        if StepSyncrhonizationPulses[leg.cycleOffset] then
-            if StepSynchronizationRequestTertiary == 0 and cycle > 0.25 and cycle < 0.3 then
-                StepSynchronizationRequestTertiary = StepSyncrhonizationPulses[leg.cycleOffset]
-            elseif StepSynchronizationRequestSecondary == 0 and cycle > 0.7 and cycle < 0.75 then
+        if StepSyncrhonizationPulses[leg.cycleOffset] and shouldSynchronizeSteps then
+            if StepSynchronizationRequestSecondary == 0 and cycle > 0.25 and cycle < 0.3 then
                 StepSynchronizationRequestSecondary = StepSyncrhonizationPulses[leg.cycleOffset]
+            elseif StepSynchronizationRequestTertiary == 0 and cycle > 0.7 and cycle < 0.75 then
+                StepSynchronizationRequestTertiary = StepSyncrhonizationPulses[leg.cycleOffset]
             end
         end
     end
@@ -341,8 +347,8 @@ function Update(I)
 
     CycleStopwatch = (CycleStopwatch + Config.deltaTime / Config.cycleDuration) % 1
 
-    I:SetPropulsionRequest(1, StepSynchronizationRequestSecondary)
-    I:SetPropulsionRequest(2, StepSynchronizationRequestTertiary)
+    I:SetPropulsionRequest(Config.stepPulseOnChannel, StepSynchronizationRequestSecondary)
+    I:SetPropulsionRequest(Config.stepPulseOffChannel, StepSynchronizationRequestTertiary)
 
     StepSynchronizationRequestSecondary = 0
     StepSynchronizationRequestTertiary = 0
