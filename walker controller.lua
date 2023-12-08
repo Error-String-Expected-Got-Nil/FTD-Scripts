@@ -53,9 +53,9 @@ Config = {
     verticalDeltaCap = 4;       --Maximum amount total vertical response can change for any given leg per second.
     lateralDeltaCap = 1;        --Maximum amount total lateral response can change for any given leg per second.
     medialDeltaCap = 1;         --Maximum amount total medial response can change for any given leg per second.
-    restDriveThreshold = 0.02;  --When the absolute value of lateral and medial response are both less than this value, a leg should be considered at rest and cease movement.
-    stepPulseOnChannel = 1;     --Which drive index to output on when a leg sends a "about to touch ground" synchronization pulse.
-    stepPulseOffChannel = 2;    --Which drive index to output on when a leg sends a "about to leave ground" synchronization pulse.
+    restDriveThreshold = 0.05;  --When the absolute value of lateral and medial response are both less than this value, a leg should be considered at rest and cease movement.
+    stepPulseOnChannel = 1;     --Which drive index to output on when a leg sends a "about to touch ground" synchronization pulse. Default (1) is the secondary drive.
+    stepPulseOffChannel = 2;    --Which drive index to output on when a leg sends a "about to leave ground" synchronization pulse. Default (2) is the tertiary drive.
     adaptiveFooting = true;     --If true, legs will attempt to adapt to craft rotation and terrain height to maintain level walking.
     heightAdaptationRate = 1;   --For adaptive footing, when the ground height under the craft changes, do not immediately change the height used for adaptive footing, instead change
                                 --    it by this much per second. Makes movement smoother.
@@ -87,16 +87,16 @@ Config = {
 LegSettings = {
   --{     name, co, restp {v, l, m}, maxp {v, l, m}, minp {v, l, m}, sh, mr {v, l, m}, rr {v, l, m}, pr {v, l, m}, yr {v, l, m},  fr {v, l, m}, hr {v, l, m}, sr {v, l, m}};
   --{"example",  0,       {0, 0, 0},      {0, 0, 0},      {0, 0, 0},  0,    {0, 0, 0},    {0, 0, 0},    {0, 0, 0},    {0, 0, 0},     {0, 0, 0},    {0, 0, 0},    {0, 0, 0}};
-    {   "test",  0,      {-4, 1, 8},      {1, 6, 2}, {-1, -5.5, -2},  2,    {0, 1, 0},    {0, 0, 0},    {0, 0, 0},   {0, 0, -1},     {0, 0, 0},    {0, 0, 0},    {0, 0, 0}};
 }
 
 --In the format [offset] = pulse strength:
 --When legs with the cycle offset 'offset' are about to touch the ground, output on the stepPulseOnChannel at pulse strength.
 --When about to leave the ground, output on the stepPulseOffChannel at pulse strength.
 --Intended to help synchronize clampy feet on legs, but could be used for other things.
+--If you don't want to use this feature, simply delete all entries from this table.
 StepSyncrhonizationPulses = {
-  --[0] = 1;
-    [0] = 0.95;
+  --[0] = 0.9;
+  --[0.5] = 0.8;
 }
 
 StepSynchronizationRequestSecondary = 0;
@@ -181,6 +181,8 @@ function LegController.new(I, name, cycleOffset, restPosition, maxPosition, minP
     return leg
 end
 
+--The following is the function which actually governs leg movement and drive response. It is a coroutine to more easily encapsulate each leg's state.
+--If you don't know what a coroutine is, it is most simply thought of as a function that can be paused and resumed, while passing data out and taking it in.
 function LegController.actionThread(leg, I)
     local verticalResponse, lateralResponse, medialResponse = 0, 0, 0
     local currentStepHeight = 0
@@ -241,8 +243,6 @@ function LegController.actionThread(leg, I)
 
             --The position of the foot, discounting step height, at the current point in the cycle.
             footPosition = Vector3.Lerp(stepMin, stepMax, (Mathf.Sin(cycle * Pi2) + 1) / 2)
-
-            --Handle adaptive footing.
             footPosition.x = footPosition.x + adaptiveFootingModifier
 
             --Add the step height of the foot at the current point in the cycle.
@@ -253,6 +253,7 @@ function LegController.actionThread(leg, I)
         end
 
         --Make sure leg doesn't try to extend farther than it's able to.
+        --Ideally legs should be configured such that they don't ever try to do this, but this is good for small errors or unlikely but over-extending drive requests.
         footPosition = Vector3.ClampMagnitude(footPosition, leg.rootLength + leg.kneeLength)
 
         --Make hip point leg towards the target point, then solve inverse kinematics using horizontal distance from root to desired foot position and the height of the desired position.
@@ -287,6 +288,8 @@ end
 function LegController.getVerticalOffset(leg, vr)
     local vertical = leg.restPosition.v
 
+    if vr == 0 then return vertical end
+    
     if vr < 0 then
         vertical = vertical + leg.minPosition.v * Mathf.Abs(vr)
     else
@@ -345,7 +348,7 @@ function Update(I)
 
         LegController.spinblockList = Spinblocks
 
-        for index, settings in ipairs(LegSettings) do
+        for _, settings in ipairs(LegSettings) do
             LegController.new(I, unpack(settings))
         end
 
