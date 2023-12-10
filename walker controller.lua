@@ -209,7 +209,7 @@ function LegController.actionThread(leg, I)
         medialResponse = medialResponse + Mathf.Clamp(medialRequest - medialResponse, -mDeltaCap, mDeltaCap)
 
         local adaptiveFootingModifier = 0
-        if Config.adaptiveFooting then do
+        if Config.adaptiveFooting then
             local craftPosition = I:GetConstructPosition()
             local craftGroundAltitude = I:GetTerrainAltitudeForPosition(craftPosition)
             --Technically the below uses the foot's *current* world position, not the desired world position, as calculating that from VLM position would be hellish.
@@ -223,7 +223,7 @@ function LegController.actionThread(leg, I)
             local verticalOffset = craftGroundAltitudeTracker - footGroundAltitude + craftPosition.y - rootPosition.y
 
             adaptiveFootingModifier = -verticalOffset
-        end end
+        end
 
         local footPosition
         local ankleAngle = 0
