@@ -99,8 +99,8 @@ StepSyncrhonizationPulses = {
   --[0.5] = 0.8;
 }
 
-StepSynchronizationRequestSecondary = 0;
-StepSynchronizationRequestTertiary = 0;
+SyncRequestOn = 0;
+SyncRequestOff = 0;
 
 
 
@@ -270,10 +270,10 @@ function LegController.actionThread(leg, I)
         I:SetSpinBlockRotationAngle(leg.ankleID, ankleAngle)
 
         if StepSyncrhonizationPulses[leg.cycleOffset] and shouldSynchronizeSteps then
-            if StepSynchronizationRequestSecondary == 0 and cycle > 0.2 and cycle < 0.25 then
-                StepSynchronizationRequestSecondary = StepSyncrhonizationPulses[leg.cycleOffset]
-            elseif StepSynchronizationRequestTertiary == 0 and cycle > 0.75 and cycle < 0.8 then
-                StepSynchronizationRequestTertiary = StepSyncrhonizationPulses[leg.cycleOffset]
+            if SyncRequestOn == 0 and cycle > 0.2 and cycle < 0.25 then
+                SyncRequestOn = StepSyncrhonizationPulses[leg.cycleOffset]
+            elseif SyncRequestOff == 0 and cycle > 0.75 and cycle < 0.8 then
+                SyncRequestOff = StepSyncrhonizationPulses[leg.cycleOffset]
             end
         end
     end
@@ -378,11 +378,11 @@ function Update(I)
 
     CycleStopwatch = (CycleStopwatch + DeltaTime / Config.cycleDuration) % 1
 
-    I:SetPropulsionRequest(Config.stepPulseOnChannel, StepSynchronizationRequestSecondary)
-    I:SetPropulsionRequest(Config.stepPulseOffChannel, StepSynchronizationRequestTertiary)
+    I:SetPropulsionRequest(Config.stepPulseOnChannel, SyncRequestOn)
+    I:SetPropulsionRequest(Config.stepPulseOffChannel, SyncRequestOff)
 
-    StepSynchronizationRequestSecondary = 0
-    StepSynchronizationRequestTertiary = 0
+    SyncRequestOn = 0
+    SyncRequestOff = 0
 
     PreviousTime = Time
 end
